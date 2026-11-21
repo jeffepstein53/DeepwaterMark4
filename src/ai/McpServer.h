@@ -17,6 +17,14 @@ class QTcpSocket;
 // answered by Claude Code, caps the calls per question, and hands each call to ai::Engine::recordTool (chat line +
 // tool journal). Requests with an Origin header (browsers) or a Host other than 127.0.0.1/localhost are refused; the
 // token is compared in constant time; third parties' text in a result is marked as data (ai::wrapExternal, 2026-11-20).
+//
+// Outside Deepwater (2026-11-21, user's request "a Deepwater MCP usable in Claude"): Claude Code and Claude Desktop
+// started by the user, not by a cube. Off by default (ai.mcp.external). When on, /mcp/ext answers with its own key,
+// written with the port to <data>/mcp/connection.json (mode 0600, new at each launch); the clients do not hold the key:
+// they start `Deepwater --mcp-stdio` (ai/McpBridge.h), which reads that file and relays each JSON-RPC line here. Only
+// the read_data skill (what the pages show; never the Sources and AI pages, keys or passwords), at most kExtPerMinute
+// calls a minute, each written to <data>/mcp/journal.jsonl. ML and backtests stay with the cubes (they are named after
+// an environment).
 namespace ai {
 
 class McpServer : public QObject {
@@ -26,6 +34,16 @@ public:
   // Starts listening if needed and writes <env folder>/mcp.json for `claude --mcp-config`; empty on failure.
   QString writeConfig(int env);
   quint16 port() const;
+
+  // outside Claude clients
+  static constexpr int kExtPerMinute = 30;
+  bool externalEnabled() const;
+  void setExternalEnabled(bool on);   // saved; on: listens and writes connection.json, off: removes it
+  void startExternal();               // at launch: listens when the setting is on
+  static QString connectionFile();    // <data>/mcp/connection.json
+  int externalCalls() const { return m_extCalls; }   // since launch
+signals:
+  void externalChanged();
 
 private:
   McpServer();
@@ -38,6 +56,11 @@ private:
   void reply(QTcpSocket* s, int code, const QByteArray& body, const QByteArray& extraHeaders = {});
   QTcpServer* m_srv = nullptr;
   QVector<QString> m_tokens;
+  QString m_extToken;
+  QList<qint64> m_extTimes;   // the last minute's external calls (ms)
+  int m_extCalls = 0;
+  bool writeConnection();
+  void handleExternalCall(QTcpSocket* s, const QJsonValue& id, const QJsonObject& params);
   QHash<QTcpSocket*, QByteArray> m_buf;
 };
 }  // namespace ai

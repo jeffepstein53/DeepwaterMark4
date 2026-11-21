@@ -68,6 +68,8 @@
 
 namespace aipage {
 namespace {
+// the desktop layout (models | four cubes) needs 1029 px (layout audit 2026-11-21): narrower windows take the phone one
+constexpr int kAgentsDesktop = 1040;
 
 const char* kMime = "application/x-deepwater-model";
 
@@ -473,7 +475,7 @@ private:
   void editEvaluation() {
     // phones: the dialog as wide as the window, its text and fields scrolling above OK / Cancel, one column of
     // finger-sized controls
-    const bool phone = ui::compact(window()->width());
+    const bool phone = ui::compact(window()->width(), kAgentsDesktop);
     QDialog d(window());
     d.setWindowTitle(QCoreApplication::translate("ai", "Evaluation mode · environment %1").arg(m_index + 1));
     QVBoxLayout* lay = nullptr;
@@ -688,6 +690,7 @@ private:
 class AgentsPage : public QWidget {
 public:
   explicit AgentsPage(QWidget* parent) : QWidget(parent), m_scroll(this) {
+    m_scroll.desktopMin = kAgentsDesktop;
     const auto& c = theme::pal();
     applyHookSlots();
     auto* root = new QVBoxLayout(this);
@@ -817,8 +820,8 @@ protected:
   void showEvent(QShowEvent*) override { resizeEvent(nullptr); }
   void resizeEvent(QResizeEvent*) override {
     if (!isVisible()) return;
-    setPhone(ui::compact(width()));
-    if (!PhoneScroll::wanted(width(), height()))   // a desktop window: the heights come from the window again
+    setPhone(ui::compact(width(), kAgentsDesktop));
+    if (!PhoneScroll::wanted(width(), height(), kAgentsDesktop))   // a desktop window: the heights come from the window again
       for (QWidget* w : {static_cast<QWidget*>(m_left), static_cast<QWidget*>(m_stack), static_cast<QWidget*>(m_listScroll)}) phoneHeight(w, 0);
     m_scroll.resize();
   }
@@ -836,7 +839,7 @@ private:
   }
   // The content's height when the page scrolls (phones, or short windows), after giving the body's parts theirs.
   int scrollHeight(int w, int vh) {
-    const bool phone = ui::compact(w);
+    const bool phone = ui::compact(w, kAgentsDesktop);
     const int inner = w - 32;   // the root's side margins
     const int top = 12 + m_head->sizeHint().height() + 10 + (phone ? m_mem->heightForWidth(inner) + 10 : 0);
     if (m_stack->currentWidget() == m_chatView) {

@@ -524,7 +524,7 @@ protected:
   void showEvent(QShowEvent*) override { refreshAll(); m_tick.start(); }
   void resizeEvent(QResizeEvent* e) override {
     QWidget::resizeEvent(e);
-    setMode(ui::compact(width()), ui::compact(width()) || height() < 420);
+    setMode(ui::compact(width(), 920), ui::compact(width(), 920) || height() < 420);   // desktop from 902 px
   }
   void hideEvent(QHideEvent*) override { m_tick.stop(); }
   void paintEvent(QPaintEvent*) override { QPainter p(this); p.fillRect(rect(), theme::pal().bg); }

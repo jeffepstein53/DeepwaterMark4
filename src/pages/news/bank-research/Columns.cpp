@@ -295,7 +295,9 @@ void NoteList::paintEvent(QPaintEvent* e) {
     const qreal fy = y + 43 + 18 * (it.lines.size() - 1) + 21;
     iconDoc(p, QRectF(kTitleX, fy - 8, 8, 9), dimmer);
     p.setFont(fFoot); p.setPen(dimmer);
-    p.drawText(QPointF(kTitleX + 12, fy), n.pdfUrl.isEmpty() ? QCoreApplication::translate("banks", "WEB · OPEN IN TERMINAL") : QCoreApplication::translate("banks", "PDF · OPEN IN TERMINAL"));
+    p.drawText(QPointF(kTitleX + 12, fy), n.type == "PODCAST" ? QCoreApplication::translate("banks", "PODCAST · LISTEN IN THE BROWSER ↗")
+                                        : n.type == "VIDEO" ? QCoreApplication::translate("banks", "VIDEO · WATCH ON YOUTUBE ↗")
+                                        : n.pdfUrl.isEmpty() ? QCoreApplication::translate("banks", "WEB · OPEN IN TERMINAL") : QCoreApplication::translate("banks", "PDF · OPEN IN TERMINAL"));
     p.restore();
   }
 }
@@ -444,7 +446,8 @@ void LeftColumn::reload() {
   for (const auto& b : banks::all()) {
     if (b.research == banks::Use::Full || !r.notes(b.id).isEmpty()) { bl << (b.researchName.isEmpty() ? b.name : b.researchName); bk << b.id; }
   }
-  for (const auto& b : banks::all()) if (b.research == banks::Use::LinkOnly) { bl << b.name + QCoreApplication::translate("banks", "  (LINK)"); bk << b.id; }
+  for (const auto& b : banks::all())   // listed once: a linked bank with podcast or video entries is already above
+    if (b.research == banks::Use::LinkOnly && !bk.contains(b.id)) { bl << b.name + QCoreApplication::translate("banks", "  (LINK)"); bk << b.id; }
   if (!m_bank.isEmpty() && !bk.contains(m_bank)) { const banks::Bank* b = banks::bank(m_bank); bl << (b ? b->name : m_bank); bk << m_bank; }
   m_banks->setItems(bl, bk);
   m_banks->setCurrentKey(m_bank);
@@ -503,6 +506,10 @@ void LeftColumn::fillData() {
   for (const auto& b : banks::researchBanks(banks::Use::Full)) row(b, QCoreApplication::translate("banks", "READ"), "#7eb8ab");
   for (const auto& b : banks::researchBanks(banks::Use::LinkOnly)) row(b, QCoreApplication::translate("banks", "LINK"), "#c7b691");
   for (const auto& b : banks::researchBanks(banks::Use::Excluded)) row(b, QCoreApplication::translate("banks", "NONE"), "#bb7373");
+  h += "</table><br><div style='color:#e1d5a6; font-weight:bold; letter-spacing:2px;'>" + QCoreApplication::translate("banks", "PODCASTS AND VIDEOS") + "</div>";
+  h += "<div style='color:#7d7a72;'>" + QCoreApplication::translate("banks", "J.P. Morgan, Bank of America, Goldman Sachs and Morgan Stanley: their public podcast feeds "
+       "(At Any Rate, Global Data Pod, Global Research Unlocked, Exchanges, The Markets, Thoughts on the Market) and YouTube channels. "
+       "Titles, dates, short summaries and a link, as a podcast app lists them; the episode or video opens on its host.") + "</div><br><table cellspacing=0 width='100%'>";
   h += "</table><br><div style='color:#e1d5a6; font-weight:bold; letter-spacing:2px;'>" + QCoreApplication::translate("banks", "REGISTRY") + "</div><br>";
   h += "<div style='color:#7d7a72;'>" + QCoreApplication::translate("banks", "Total assets: latest <i>Assets</i> fact of each bank's SEC filings (10-K / 10-Q, 20-F, 40-F / 6-K) "
        "from <a href='https://www.sec.gov/edgar/sec-api-documentation'>SEC EDGAR XBRL</a>, in the filing currency. "

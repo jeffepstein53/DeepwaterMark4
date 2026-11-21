@@ -1,3 +1,5 @@
+#include "app/Zoom.h"
+#include <QMenu>
 #include "ui/Touch.h"
 #include <QApplication>
 #include "app/NavDrawer.h"
@@ -33,7 +35,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 #ifdef Q_OS_IOS
   setMinimumSize(1, 1);        // the screen's size, whatever it is (pages lay out for phones: ui/Touch.h)
 #else
-  setMinimumSize(1024, 600);   // smallest laptop work area we support (e.g. 1280x720 at 125–150 % scaling, minus taskbar and title bar)
+  // 640x480 since 2026-11-21 (user: "on laptops the window should shrink further"; it was 1024x600): narrower than a
+  // page's desktop layout, the page takes its phone layout (ui::compact(width, desktopMin)); layout audit at 640–1024 clean
+  setMinimumSize(640, 480);
 #endif
   auto* central = new QWidget(this);
   central->setAutoFillBackground(true);
@@ -61,6 +65,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   addAction(prefs);
   // macOS shows it in the system menu bar (application menu › Settings…); elsewhere the gear is enough
   if (QGuiApplication::platformName() == "cocoa") menuBar()->addMenu("Deepwater")->addAction(prefs);
+  // Interface zoom (app/Zoom.h): Cmd+= / Cmd+- / Cmd+0, applied at the next launch; macOS: View menu
+#ifndef Q_OS_IOS
+  {
+    QMenu* view = QGuiApplication::platformName() == "cocoa" ? menuBar()->addMenu(QCoreApplication::translate("options", "View")) : nullptr;
+    auto zoomAction = [&](const QString& text, const QList<QKeySequence>& keys, int dir) {
+      auto* a = new QAction(text, this);
+      a->setShortcuts(keys);
+      a->setShortcutContext(Qt::ApplicationShortcut);
+      connect(a, &QAction::triggered, this, [this, dir] { zoom::step(this, dir); });
+      addAction(a);
+      if (view) view->addAction(a);
+    };
+    zoomAction(QCoreApplication::translate("options", "Zoom in"), {QKeySequence(Qt::CTRL | Qt::Key_Equal), QKeySequence(Qt::CTRL | Qt::Key_Plus)}, 1);
+    zoomAction(QCoreApplication::translate("options", "Zoom out"), {QKeySequence(Qt::CTRL | Qt::Key_Minus)}, -1);
+    zoomAction(QCoreApplication::translate("options", "Actual size"), {QKeySequence(Qt::CTRL | Qt::Key_0)}, 0);
+  }
+#endif
   // Documentation: the header's ?, F1 and Cmd+? (macOS: the Help menu)
   auto* help = new QAction(QCoreApplication::translate("help", "Deepwater documentation"), this);
   help->setShortcuts({QKeySequence(Qt::Key_F1), QKeySequence::HelpContents});

@@ -7,6 +7,9 @@
 #include "core/Process.h"
 #include <QStandardPaths>
 #include <QTimer>
+#include <QHash>
+#include <QRegularExpression>
+#include <QSet>
 #include <memory>
 
 namespace ai::claudecode {
@@ -16,11 +19,16 @@ bool isKey(const QString& repo, const QString& file) { return repo == kRepo && f
 QProcessEnvironment environment() {
   QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
   const QString home = QDir::homePath();
-  QStringList path = env.value("PATH").split(':', Qt::SkipEmptyParts);
-  for (const QString& d : {home + "/.local/bin", home + "/.claude/local", QString("/opt/homebrew/bin"), QString("/usr/local/bin"),
-                           QString("/usr/bin"), QString("/bin")})
+  // ';' on Windows, ':' elsewhere (a ':' split cut "C:\…" entries in two)
+  QStringList path = env.value("PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts);
+#ifdef Q_OS_WIN
+  const QStringList extra{home + "/.local/bin", qEnvironmentVariable("APPDATA") + "/npm"};
+#else
+  const QStringList extra{home + "/.local/bin", home + "/.claude/local", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"};
+#endif
+  for (const QString& d : extra)
     if (!path.contains(d)) path << d;
-  env.insert("PATH", path.join(':'));
+  env.insert("PATH", path.join(QDir::listSeparator()));
   return env;
 }
 
@@ -31,7 +39,39 @@ QString binary() {
     const QFileInfo f(p);
     if (f.exists() && f.isExecutable()) return f.absoluteFilePath();
   }
-  return QStandardPaths::findExecutable("claude", environment().value("PATH").split(':', Qt::SkipEmptyParts));
+  return QStandardPaths::findExecutable("claude", environment().value("PATH").split(QDir::listSeparator(), Qt::SkipEmptyParts));
+}
+
+namespace {
+// optional option → how many values follow it
+const QHash<QString, int>& optional() {
+  static const QHash<QString, int> o{{"--permission-prompts", 1}, {"--system-prompt-snapshot", 1},
+                                     {"--disable-slash-commands", 0}, {"--effort", 1}};
+  return o;
+}
+QSet<QString>& unsupported() { static QSet<QString> s; return s; }
+}  // namespace
+
+QString unknownOption(const QString& err) {
+  static const QRegularExpression re(QStringLiteral("unknown option '(--[A-Za-z0-9-]+)'"));
+  const auto m = re.match(err);
+  return m.hasMatch() ? m.captured(1) : QString();
+}
+
+bool markUnsupported(const QString& err) {
+  const QString opt = unknownOption(err);
+  if (opt.isEmpty() || !optional().contains(opt) || unsupported().contains(opt)) return false;
+  unsupported().insert(opt);
+  return true;
+}
+
+QStringList withoutUnsupported(const QStringList& args) {
+  QStringList out;
+  for (int i = 0; i < args.size(); ++i) {
+    if (unsupported().contains(args[i])) { i += optional().value(args[i]); continue; }
+    out << args[i];
+  }
+  return out;
 }
 
 Probe& Probe::instance() { static Probe* p = new Probe; return *p; }

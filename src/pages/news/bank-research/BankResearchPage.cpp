@@ -1,4 +1,5 @@
 #include "pages/news/bank-research/BankResearchPage.h"
+#include "ui/Kit.h"
 #include "pages/news/bank-research/Columns.h"
 #include "pages/news/bank-research/GlobeView.h"
 #include "pages/news/bank-research/PdfPanel.h"
@@ -164,6 +165,8 @@ void BankResearchPage::openNote(const QString& id) {
   const banks::Note* n = banks::Research::instance().note(id);
   if (!n) return;
   m_left->setSelected(id);
+  // a podcast episode or a video (the US banks' feeds) plays on its host: the browser, not the PDF reader
+  if (n->type == "PODCAST" || n->type == "VIDEO") { ui::openWebLink(n->url); return; }
   m_pdf->openNote(*n);
   m_pdf->show(); m_pdf->raise();
   m_globe->setPaused(true);

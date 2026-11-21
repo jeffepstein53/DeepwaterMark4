@@ -11,11 +11,16 @@
 #include <QTimer>
 #include <QLineEdit>
 #include "app/HelpWindow.h"
+#include "app/Zoom.h"
+#include "ai/McpBridge.h"
+#include "ai/McpServer.h"
 #include "app/Updater.h"
 #include <QSurfaceFormat>
 #include <QScreen>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include "ml/Runs.h"
 #include "ai/Evaluation.h"
@@ -24,7 +29,7 @@
 //   --page tab/sub          open this page (e.g. market/seasonality)
 //   --goto tab/sub --goto-at ms   open that page later (tests: what a visit finds after the background preloads)
 //   --size WxH              window size in logical pixels (1600x1042 gives a 1600x966 page, the reference size); below
-//                           1024x600 the minimum is lifted: --size 430x932 shows the phone layout (+ DW_TOUCH_SIM=1)
+//                           640x480 the minimum is lifted: --size 430x932 shows the phone layout (+ DW_TOUCH_SIM=1)
 //   --screenshot file.png   grab the window after --delay ms (default 6000) and quit
 //   --quit-after ms         quit after this many ms (profiling runs)
 //   --lang en|fr            interface language (saved, as from the Options dialog)
@@ -51,12 +56,17 @@ int main(int argc, char** argv) {
 #else
   QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 #endif
+  // the names first: the saved zoom is read from the settings before the application exists (QT_SCALE_FACTOR)
+  QCoreApplication::setOrganizationName("deepwater-terminal");
+  QCoreApplication::setOrganizationDomain("deepwater-terminal.com");
+  QCoreApplication::setApplicationName("Deepwater");
+#ifndef Q_OS_IOS
+  if (ai::mcpbridge::wanted(argc, argv)) return ai::mcpbridge::run(argc, argv);   // started by Claude: no window
+#endif
+  zoom::installSaved();
   QApplication app(argc, argv);
   dw::runStartupFunctions();   // iOS: the services Qt could not start inside the constructor (core/Startup.h)
   ui::touch::install();        // finger scrolling (iOS, or DW_TOUCH_SIM=1 on a Mac)
-  QApplication::setOrganizationName("deepwater-terminal");
-  QApplication::setOrganizationDomain("deepwater-terminal.com");
-  QApplication::setApplicationName("Deepwater");
   QApplication::setApplicationVersion(QStringLiteral(DW_VERSION));   // CMakeLists.txt project() VERSION
 
   QCommandLineParser cli;
@@ -102,6 +112,15 @@ int main(int argc, char** argv) {
   if (cli.isSet("options")) QTimer::singleShot(300, &w, [&w] { w.showOptions(); });
   // updates (app/Updater): the launch check and the release WebSocket; not during the audits, which measure pages
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) app::Updater::instance().start();
+  // Claude outside Deepwater (AI › LLM › Integration): served while the app runs, when switched on
+  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) {
+    ai::McpServer::instance().startExternal();
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [] {   // only this instance's file (another one may be open)
+      QFile f(ai::McpServer::connectionFile());
+      if (f.open(QIODevice::ReadOnly) && QJsonDocument::fromJson(f.readAll()).object().value("pid").toInteger() == QCoreApplication::applicationPid())
+        f.remove();
+    });
+  }
   if (cli.isSet("updates")) QTimer::singleShot(300, &w, [&w] { w.showUpdates(); });
   if (cli.isSet("help-page"))
     QTimer::singleShot(300, &w, [&w, v = cli.value("help-page"), q = cli.value("help-search")] {

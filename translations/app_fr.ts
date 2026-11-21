@@ -382,6 +382,46 @@
         <source>Changes apply immediately and are saved.  Esc closes.</source>
         <translation>Les changements s&apos;appliquent tout de suite et sont enregistrés.  Échap ferme.</translation>
     </message>
+    <message>
+        <source>View</source>
+        <translation>Présentation</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Agrandir</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Réduire</translation>
+    </message>
+    <message>
+        <source>Actual size</source>
+        <translation>Taille réelle</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>The interface will be shown at %1 % after Deepwater restarts. Restart now?</source>
+        <translation>L&apos;interface s&apos;affichera à %1 % après le redémarrage de Deepwater. Redémarrer maintenant ?</translation>
+    </message>
+    <message>
+        <source>ZOOM</source>
+        <translation>ZOOM</translation>
+    </message>
+    <message>
+        <source>RESTART NOW</source>
+        <translation>REDÉMARRER MAINTENANT</translation>
+    </message>
+    <message>
+        <source>Size of the whole interface. A new zoom applies when Deepwater restarts (Cmd+= / Cmd+- / Cmd+0).</source>
+        <translation>Taille de toute l&apos;interface. Un nouveau zoom s&apos;applique au redémarrage de Deepwater (Cmd+= / Cmd+- / Cmd+0).</translation>
+    </message>
+    <message>
+        <source>Size of the whole interface. %1 % is chosen: it applies when Deepwater restarts.</source>
+        <translation>Taille de toute l&apos;interface. %1 % est choisi : il s&apos;applique au redémarrage de Deepwater.</translation>
+    </message>
 </context>
 <context>
     <name>theme</name>

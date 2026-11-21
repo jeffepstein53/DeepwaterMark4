@@ -44,6 +44,17 @@ private:
 QString binary();                       // the `claude` program, searched where its installers put it; empty if none
 QProcessEnvironment environment();      // PATH completed for a GUI app (Finder starts apps with a bare PATH)
 
+// Options of `claude -p` that an older Claude Code may not know (a 2026-11 report: one stopped with "error:
+// unknown option '--permission-prompts'"). None of them keeps Claude's own tools off (--tools "", --setting-sources "",
+// --strict-mcp-config and --permission-mode dontAsk do, and stay required): when `claude` refuses one, the Engine drops
+// it for the rest of the session and asks again.
+//   claudecode::withoutUnsupported(args)     the arguments minus the options found unsupported (and their values)
+//   claudecode::markUnsupported(stderrText)  true when the error names an optional option not dropped yet
+//   claudecode::unknownOption(stderrText)    "--tools" from "error: unknown option '--tools'", empty if none
+QStringList withoutUnsupported(const QStringList& args);
+bool markUnsupported(const QString& stderrText);
+QString unknownOption(const QString& stderrText);
+
 // Settings of AI › LLM › Integration (ai.claude.model / ai.claude.effort); empty = Claude Code's own default.
 QStringList modelAliases();             // "", "opus", "sonnet", "fable", "haiku"
 QStringList effortLevels();             // "", "low", "medium", "high", "xhigh", "max"

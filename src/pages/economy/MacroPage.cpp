@@ -5,6 +5,10 @@
 #include "macro/MacroStore.h"
 #include "macro/Registry.h"
 #include "macro/CentralBanks.h"
+#include "macro/Watchlist.h"
+#include "core/Settings.h"
+#include <QMenu>
+#include <QContextMenuEvent>
 #include "app/Pages.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
@@ -78,8 +82,10 @@ public:
 class Registry : public QWidget {
 public:
   std::function<void(const QString&)> onHover, onClick;
+  std::function<void()> onGroup;   // the tab changed (the page tints the globe for ☆ WATCH)
   explicit Registry(QWidget* p) : QWidget(p) {
-    setMouseTracking(true); setList(Group::G20);
+    setMouseTracking(true);
+    setList(Group(std::clamp(settings::value("economy.macro.registryGroup", 0).toInt(), 0, kGroupCount - 1)));
     // a finger drags the list (QScroller: kinetic, and a tap still opens the row); the mouse keeps the wheel
     if (ui::touch::enabled()) {
 #ifdef Q_OS_IOS
@@ -103,21 +109,40 @@ public:
   qreal lh() const { return height() / m_k; }
   std::function<bool(const Economy&)> filter;   // cadence filter from the bottom controls
   void setList(Group g) {
+    const bool same = g == m_group;
     m_group = g; m_list.clear();
     for (const auto& e : registry(g)) if (!filter || filter(e)) m_list << e;
-    m_scroll = 0; update();
+    if (!same) m_scroll = 0;
+    m_scroll = std::clamp(m_scroll, 0.0, maxScroll());
+    update();
+  }
+  void choose(Group g) {   // a click on a tab: remembered for the next launch
+    setList(g);
+    settings::setValue("economy.macro.registryGroup", int(g));
+    if (onGroup) onGroup();
   }
   Group group() const { return m_group; }
   int rowTop() const { return m_phone ? 76 : 66; }
   qreal pitch() const { return 31.7; }
+  // seven tabs (six groups and ☆ WATCH) sized from their labels and spread over the width: the free room is shared
+  // as padding, or taken back from it when the labels are wider than the panel (French, narrow windows)
+  QFont tabFont() const { return eco::mono(m_phone ? 10 : 9, QFont::Bold, m_phone ? 0.5 : 0.2); }
   QRectF tabRect(int i) const {
-    static const qreal xs[6] = {6, 52, 111, 163, 215, 254};
-    static const qreal ws[6] = {42, 54, 48, 48, 35, 60};
-    if (m_phone) {
-      const qreal k = std::max(1.0, (lw() - 12) / 308.0);
-      return QRectF(6 + (xs[i] - 6) * k, 38, ws[i] * k, 30);
-    }
-    return QRectF(xs[i], 41, ws[i], 18);
+    const QFontMetricsF fm(tabFont());
+    qreal text[kGroupCount], sum = 0;
+    for (int k = 0; k < kGroupCount; ++k) { text[k] = fm.horizontalAdvance(groupLabel(Group(k))); sum += text[k]; }
+    const qreal avail = lw() - 12, gap = 2;
+    const qreal pad = std::clamp((avail - sum - gap * (kGroupCount - 1)) / kGroupCount, 2.0, m_phone ? 40.0 : 12.0);
+    qreal x = 6;
+    for (int k = 0; k < i; ++k) x += text[k] + pad + gap;
+    return m_phone ? QRectF(x, 38, text[i] + pad, 30) : QRectF(x, 41, text[i] + pad, 18);
+  }
+  // the ☆ of a row: left of the rate badge
+  QRectF starRect(int row) const {
+    const qreal y = rowTop() + row * pitch() - m_scroll;
+    const QString badge = rateBadge(m_list[row]);
+    const qreal bw = QFontMetricsF(eco::mono(9, QFont::Bold, 0.5)).horizontalAdvance(badge) + 16;
+    return QRectF(lw() - 8 - bw - 24, y + (pitch() - 20) / 2, 20, 20);
   }
   int rowAt(const QPointF& pos) const {
     if (pos.y() < rowTop()) return -1;
@@ -139,11 +164,11 @@ public:
     p.setFont(eco::mono(11)); p.setPen(C("#5c5744"));
     p.drawText(QRectF(0, 2, lw() - 12, 30), Qt::AlignRight | Qt::AlignVCenter, QString::number(m_list.size()));
     // tabs
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < kGroupCount; ++i) {
       const QRectF r = tabRect(i);
       const bool sel = int(m_group) == i, hov = r.contains(m_mouse);
       if (sel) { p.setPen(Qt::NoPen); p.setBrush(C("#ffd900")); p.drawRoundedRect(r, 2, 2); }
-      p.setFont(eco::mono(10, QFont::Bold, 0.5));
+      p.setFont(tabFont());
       p.setPen(sel ? theme::onAccent() : hov ? C("#fcd700") : C("#848178"));
       p.drawText(r, Qt::AlignCenter, groupLabel(Group(i)));
     }
@@ -165,7 +190,15 @@ public:
       p.drawPixmap(QPointF(33 + dx, y + (pitch() - 14) / 2), macro::flag(e.iso2, QSize(21, 14)));
       p.setFont(eco::display(13, QFont::Bold, 0.3)); p.setPen(C("#efebdf"));
       p.drawText(QRectF(62 + dx, y, 220, pitch()), Qt::AlignVCenter | Qt::AlignLeft,
-                 QFontMetricsF(eco::display(13, QFont::Bold, 0.3)).elidedText(displayName(e).toUpper(), Qt::ElideRight, lw() - 62 - dx - 60));
+                 QFontMetricsF(eco::display(13, QFont::Bold, 0.3)).elidedText(displayName(e).toUpper(), Qt::ElideRight, lw() - 62 - dx - 84));
+      // ☆ watchlist: filled for a listed country, an outline on the hovered row (a click toggles it)
+      const bool listed = Watchlist::instance().contains(e.iso2);
+      if (listed || hov) {
+        const QRectF sr = starRect(i);
+        p.setFont(eco::mono(13, QFont::Bold));
+        p.setPen(listed ? C("#ffd900") : sr.contains(m_mouse) ? C("#fff09a") : C("#6b6346"));
+        p.drawText(sr, Qt::AlignCenter, QString::fromUtf8(listed ? "★" : "☆"));
+      }
       const QString badge = rateBadge(e);
       const QFont bf = eco::mono(9, QFont::Bold, 0.5);
       const qreal bw = QFontMetricsF(bf).horizontalAdvance(badge) + 16;
@@ -177,6 +210,11 @@ public:
       p.drawEllipse(QPointF(br.left() + 5, br.center().y()), 1.3, 1.3);
       p.setFont(bf); p.setPen(dim ? C("#615e51") : C("#eadf92"));
       p.drawText(br.adjusted(6, 0, 0, 0), Qt::AlignCenter, badge);
+    }
+    if (m_list.isEmpty() && m_group == Group::Watch) {
+      p.setFont(eco::mono(10)); p.setPen(C("#848178"));
+      p.drawText(QRectF(16, rowTop() + 16, lw() - 32, 120), Qt::AlignTop | Qt::AlignHCenter | Qt::TextWordWrap,
+                 QCoreApplication::translate("economy", "Your watchlist is empty. Add a country with the ☆ of its row in the other tabs, or with a right-click on the globe."));
     }
     // the list scrolls with the wheel (small windows): a thin thumb and a fade at the cut edge say so
     if (const qreal maxS = maxScroll(); maxS > 0) {
@@ -200,7 +238,11 @@ public:
     const QString iso = r >= 0 ? m_list[r].iso2 : QString();
     if (iso != m_hoverIso) { m_hoverIso = iso; if (onHover) onHover(iso); }
     bool hand = r >= 0;
-    for (int i = 0; i < 6; ++i) hand |= tabRect(i).contains(m_mouse);
+    for (int i = 0; i < kGroupCount; ++i) hand |= tabRect(i).contains(m_mouse);
+    setToolTip(r >= 0 && starRect(r).contains(m_mouse)
+                   ? (Watchlist::instance().contains(m_list[r].iso2) ? QCoreApplication::translate("economy", "Remove from the watchlist")
+                                                                       : QCoreApplication::translate("economy", "Add to the watchlist"))
+                   : QString());
     setCursor(hand ? Qt::PointingHandCursor : Qt::ArrowCursor);
     update();
   }
@@ -211,8 +253,9 @@ public:
   }
   void mousePressEvent(QMouseEvent* e) override {
     const QPointF pos = e->position() / m_k;
-    for (int i = 0; i < 6; ++i) if (tabRect(i).contains(pos)) { setList(Group(i)); return; }
+    for (int i = 0; i < kGroupCount; ++i) if (tabRect(i).contains(pos)) { choose(Group(i)); return; }
     const int r = rowAt(pos);
+    if (r >= 0 && starRect(r).contains(pos)) { Watchlist::instance().toggle(m_list[r].iso2); return; }
     if (r >= 0 && onClick) onClick(m_list[r].iso2);
   }
   void wheelEvent(QWheelEvent* e) override {
@@ -361,6 +404,21 @@ MacroPage::MacroPage(QWidget* parent) : QWidget(parent) {
     const Economy* e = macro::economy(iso);
     if (e) openEconomy(e->iso2);
   });
+  m_registry->onGroup = [this] { updateTint(); };
+  // the watchlist from the globe: right-click a country
+  m_globe->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(m_globe, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+    const Economy* e = macro::economy(m_globe->countryAtPoint(pos));
+    if (!e) return;
+    QMenu menu(this);
+    const bool listed = Watchlist::instance().contains(e->iso2);
+    menu.addAction(listed ? QCoreApplication::translate("economy", "Remove %1 from the watchlist").arg(displayName(*e))
+                          : QCoreApplication::translate("economy", "Add %1 to the watchlist").arg(displayName(*e)),
+                   this, [iso = e->iso2] { Watchlist::instance().toggle(iso); });
+    menu.addAction(QCoreApplication::translate("economy", "Open %1").arg(displayName(*e)), this, [this, iso = e->iso2] { openEconomy(iso); });
+    menu.exec(m_globe->mapToGlobal(pos));
+  });
+  connect(&Watchlist::instance(), &Watchlist::changed, this, [this] { m_registry->setList(m_registry->group()); updateTint(); });
   m_controls->onReset = [this] { m_globe->resetView(); };
   m_controls->onToggle = [this] { updateTint(); };
   connect(m_file, &AssetFile::closeRequested, this, &MacroPage::closeFile);
@@ -368,6 +426,7 @@ MacroPage::MacroPage(QWidget* parent) : QWidget(parent) {
   auto& ms = MacroStore::instance();
   connect(&ms, &MacroStore::updated, this, [this] { m_top->update(); m_registry->update(); });
   connect(&eco::Blink::instance(), &eco::Blink::tick, this, [this] { m_top->update(QRect(0, 0, 420, 36)); m_registry->update(QRect(0, 0, 300, 32)); });
+  updateTint();   // the registry's filter, and the globe lit when the saved tab is ☆ WATCH
 }
 
 void MacroPage::updateTint() {
@@ -382,7 +441,14 @@ void MacroPage::updateTint() {
     return annual;
   };
   m_registry->setList(m_registry->group());
-  m_globe->setTint({});
+  // ☆ WATCH: the listed countries lit on the globe (the euro area lights its members)
+  QHash<QString, int> tint;
+  if (m_registry->group() == Group::Watch)
+    for (const QString& iso : Watchlist::instance().codes()) {
+      tint.insert(iso, 90);
+      if (iso == "ez") for (const auto& x : economies()) if (isEuroMember(x)) tint.insert(x.iso2, 90);
+    }
+  m_globe->setTint(tint);
 }
 
 void MacroPage::resizeEvent(QResizeEvent*) {
@@ -436,7 +502,7 @@ void MacroPage::preload() { MacroStore::instance().ensureLoaded(); }
 
 void MacroPage::applyHooks() {
   const QByteArray grp = qgetenv("DW_MACRO_GROUP");
-  if (!grp.isEmpty()) m_registry->setList(Group(std::clamp(grp.toInt(), 0, 5)));
+  if (!grp.isEmpty()) { m_registry->setList(Group(std::clamp(grp.toInt(), 0, kGroupCount - 1))); updateTint(); }
   const QByteArray c = qgetenv("DW_MACRO_COUNTRY");
   if (!c.isEmpty()) openEconomy(QString::fromLatin1(c));
   if (qEnvironmentVariableIsSet("DW_MACRO_TAB")) m_file->setTab(qEnvironmentVariableIntValue("DW_MACRO_TAB"));

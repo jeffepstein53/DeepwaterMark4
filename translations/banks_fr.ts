@@ -1115,5 +1115,37 @@ LONG = prévision supérieure d'au moins %1 % au spot, SHORT = inférieure d'au 
         <source>The PDF could not be saved to %1.</source>
         <translation>Le PDF n’a pas pu être enregistré dans %1.</translation>
     </message>
+    <message>
+        <source>PODCASTS</source>
+        <translation>PODCASTS</translation>
+    </message>
+    <message>
+        <source>PODCAST</source>
+        <translation>PODCAST</translation>
+    </message>
+    <message>
+        <source>VIDEOS</source>
+        <translation>VIDÉOS</translation>
+    </message>
+    <message>
+        <source>VIDEO</source>
+        <translation>VIDÉO</translation>
+    </message>
+    <message>
+        <source>PODCAST · LISTEN IN THE BROWSER ↗</source>
+        <translation>PODCAST · ÉCOUTER DANS LE NAVIGATEUR ↗</translation>
+    </message>
+    <message>
+        <source>VIDEO · WATCH ON YOUTUBE ↗</source>
+        <translation>VIDÉO · VOIR SUR YOUTUBE ↗</translation>
+    </message>
+    <message>
+        <source>PODCASTS AND VIDEOS</source>
+        <translation>PODCASTS ET VIDÉOS</translation>
+    </message>
+    <message>
+        <source>J.P. Morgan, Bank of America, Goldman Sachs and Morgan Stanley: their public podcast feeds (At Any Rate, Global Data Pod, Global Research Unlocked, Exchanges, The Markets, Thoughts on the Market) and YouTube channels. Titles, dates, short summaries and a link, as a podcast app lists them; the episode or video opens on its host.</source>
+        <translation>J.P. Morgan, Bank of America, Goldman Sachs et Morgan Stanley : leurs flux publics de podcasts (At Any Rate, Global Data Pod, Global Research Unlocked, Exchanges, The Markets, Thoughts on the Market) et leurs chaînes YouTube. Titres, dates, résumés courts et un lien, comme les liste une app de podcasts ; l&apos;épisode ou la vidéo s&apos;ouvre chez son hébergeur.</translation>
+    </message>
 </context>
 </TS>

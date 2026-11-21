@@ -11,6 +11,9 @@
 namespace ui {
 constexpr int kCompactWidth = 760;   // below it: phone layout (an iPhone upright is 390–440 points wide)
 inline bool compact(int width) { return width > 0 && width < kCompactWidth; }
+// A page whose desktop layout needs more than kCompactWidth (2026-11-21: the window may now go down to 640 px wide) takes
+// its phone layout below its own desktop width too, instead of squeezing: compact(width(), 1040).
+inline bool compact(int width, int desktopMin) { return width > 0 && width < (desktopMin > kCompactWidth ? desktopMin : kCompactWidth); }
 
 namespace touch {
 bool enabled();   // iOS, or DW_TOUCH_SIM=1

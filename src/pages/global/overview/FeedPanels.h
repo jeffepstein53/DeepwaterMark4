@@ -105,10 +105,13 @@ protected:
   bool event(QEvent*) override;
 private:
   QList<QRectF> tabRects() const;
+  QRectF starRect(int row) const;   // the ☆ (watchlist) of a row, left of its badge
+  int rowAt(const QPointF& pos) const;
   QList<overview::RegistryRow> rows() const;
   overview::Registry m_reg;
   int m_tab = 0;
-  int m_hoverTab = -1;
+  int m_hoverTab = -1, m_hoverRow = -1;
+  QPointF m_mouse{-1, -1};
   qreal m_scroll = 0;
 };
 }  // namespace overview

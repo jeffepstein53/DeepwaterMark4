@@ -2471,5 +2471,33 @@
         <source>Closing the panel is not available on this page</source>
         <translation>La fermeture du panneau n&apos;est pas disponible sur cette page</translation>
     </message>
+    <message>
+        <source>WATCH</source>
+        <translation>SUIVI</translation>
+    </message>
+    <message>
+        <source>Your watchlist is empty. Add a country with the ☆ of its row in the other tabs, or with a right-click on the globe.</source>
+        <translation>Votre liste de suivi est vide. Ajoutez un pays avec le ☆ de sa ligne dans les autres onglets, ou d&apos;un clic droit sur le globe.</translation>
+    </message>
+    <message>
+        <source>Remove from the watchlist</source>
+        <translation>Retirer de la liste de suivi</translation>
+    </message>
+    <message>
+        <source>Add to the watchlist</source>
+        <translation>Ajouter à la liste de suivi</translation>
+    </message>
+    <message>
+        <source>Remove %1 from the watchlist</source>
+        <translation>Retirer %1 de la liste de suivi</translation>
+    </message>
+    <message>
+        <source>Add %1 to the watchlist</source>
+        <translation>Ajouter %1 à la liste de suivi</translation>
+    </message>
+    <message>
+        <source>Open %1</source>
+        <translation>Ouvrir %1</translation>
+    </message>
 </context>
 </TS>

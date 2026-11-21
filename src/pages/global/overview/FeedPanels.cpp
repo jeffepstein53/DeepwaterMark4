@@ -8,6 +8,7 @@
 #include "ui/Kit.h"
 #include "ui/Theme.h"
 #include "macro/Registry.h"
+#include "macro/Watchlist.h"
 #include <QHelpEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -742,36 +743,55 @@ void CentralBanksPanel::paintEvent(QPaintEvent*) {
 }
 
 // ================================================================= Asset Registry
-static const QStringList kRegions{"G20", "AMERICA", "EUROPE", "AFRICA", "ASIA", "OCEANIA"};   // settings values
+static const QStringList kRegions{"G20", "AMERICA", "EUROPE", "AFRICA", "ASIA", "OCEANIA", "WATCH"};   // settings values
 static const char* const kRegionLabels[] = {QT_TRANSLATE_NOOP("global", "★ G20"), QT_TRANSLATE_NOOP("global", "AMERICA"),
   QT_TRANSLATE_NOOP("global", "EUROPE"), QT_TRANSLATE_NOOP("global", "AFRICA"), QT_TRANSLATE_NOOP("global", "ASIA"),
-  QT_TRANSLATE_NOOP("global", "OCEANIA")};
+  QT_TRANSLATE_NOOP("global", "OCEANIA"), QT_TRANSLATE_NOOP("global", "☆ WATCH")};
 static QString regionLabel(int i) { return QCoreApplication::translate("global", kRegionLabels[i]); }
 static const char* kSettingRegion = "global.overview.registryRegion";
 
 RegistryPanel::RegistryPanel(QWidget* parent) : QWidget(parent) {
   setAttribute(Qt::WA_OpaquePaintEvent);
   setMouseTracking(true);
-  m_tab = qBound(0, int(kRegions.indexOf(settings::value(kSettingRegion, "G20").toString())), 5);
+  m_tab = qBound(0, int(kRegions.indexOf(settings::value(kSettingRegion, "G20").toString())), int(kRegions.size()) - 1);
   m_reg.status = QCoreApplication::translate("global", "CONNECTING…");
 }
-void RegistryPanel::setRegistry(const Registry& r) { m_reg = r; m_scroll = 0; update(); }
+void RegistryPanel::setRegistry(const Registry& r) {   // keeps the scroll (a ☆ toggled pushes the registry again)
+  m_reg = r;
+  m_scroll = qBound<qreal>(0, m_scroll, qMax<qreal>(0, rows().size() * 31.7 - (height() - 64)));
+  update();
+}
 
 QRect RegistryPanel::cursorRect() const {
   const qreal x = 30 + look::width(QCoreApplication::translate("global", "ASSET REGISTRY"), theme::mono(10, QFont::Normal, 2.2));
   return QRectF(x, 10, 9, 14).toAlignedRect();
 }
+// seven tabs on one line: the labels' padding shrinks (8 → 2 px) when the panel is narrow
 QList<QRectF> RegistryPanel::tabRects() const {
   QList<QRectF> out;
   const QFont f = theme::mono(10, QFont::Normal, 1);
+  qreal sum = 0;
+  for (int i = 0; i < kRegions.size(); ++i) sum += look::width(regionLabel(i), f);
+  const qreal pad = qBound<qreal>(2, (width() - 12 - sum - 2 * (kRegions.size() - 1)) / kRegions.size(), 8);
   qreal x = 6;
   for (int i = 0; i < kRegions.size(); ++i) {
-    const QString t = regionLabel(i);
-    const qreal w = look::width(t, f) + 8;
+    const qreal w = look::width(regionLabel(i), f) + pad;
     out << QRectF(x, 38, w, 18);
     x += w + 2;
   }
   return out;
+}
+int RegistryPanel::rowAt(const QPointF& pos) const {
+  if (pos.y() <= 63) return -1;
+  const int k = int(std::floor((pos.y() - 63 + m_scroll) / 31.7));
+  return k >= 0 && k < rows().size() ? k : -1;
+}
+QRectF RegistryPanel::starRect(int k) const {
+  const auto rs = rows();
+  const QString badge = "• " + rs[k].institution.toUpper();
+  const qreal bw = look::width(badge, theme::mono(9, QFont::Bold)) + 10;
+  const qreal cy = 63 + k * 31.7 - m_scroll + 31.7 / 2;
+  return QRectF(width() - 12 - bw - 6 - 26, cy - 10, 20, 20);
 }
 QList<RegistryRow> RegistryPanel::rows() const { return m_tab < m_reg.tabs.size() ? m_reg.tabs[m_tab] : QList<RegistryRow>{}; }
 
@@ -808,6 +828,11 @@ void RegistryPanel::paintEvent(QPaintEvent*) {
   p.setClipRect(lr);
   p.fillRect(QRectF(0, lr.top(), 2, lr.height()), theme::map("#6b6045"));
   if (idx.isEmpty()) {
+    if (m_tab == int(macro::Group::Watch) && !m_reg.tabs.isEmpty()) {
+      p.setFont(theme::mono(10)); p.setPen(theme::map("#848178"));
+      p.drawText(QRectF(16, lr.top() + 20, W - 32, 120), Qt::AlignTop | Qt::AlignHCenter | Qt::TextWordWrap,
+                 QCoreApplication::translate("global", "Your watchlist is empty. Add a country with the ☆ of its row in the other tabs."));
+    } else
     look::textCenter(p, W / 2, lr.top() + 60, m_reg.tabs.isEmpty() ? (m_reg.status.isEmpty() ? QCoreApplication::translate("global", "NO DATA") : m_reg.status.toUpper()) : QCoreApplication::translate("global", "NO COUNTRY"),
                      theme::mono(10, QFont::Normal, 2.5), theme::map("#4c4e4e"));
   }
@@ -838,6 +863,14 @@ void RegistryPanel::paintEvent(QPaintEvent*) {
     p.setBrush(r.primary ? theme::map("#594c01") : theme::map("#141002"));
     p.drawRoundedRect(br.adjusted(0.5, 0.5, -0.5, -0.5), 2, 2);
     look::text(p, br.left() + 8, br.center().y() + 3.5, badge, bf, r.primary ? theme::map("#fbebaa") : theme::map("#4e4b40"));
+    // ☆ watchlist: filled when listed, an outline on the hovered row
+    const bool listed = macro::Watchlist::instance().contains(r.iso2);
+    if (listed || k == m_hoverRow) {
+      const QRectF sr = starRect(k);
+      p.setFont(theme::mono(13, QFont::Bold));
+      p.setPen(listed ? theme::map("#fcd700") : sr.contains(m_mouse) ? theme::map("#fff09a") : theme::map("#6b6346"));
+      p.drawText(sr, Qt::AlignCenter, QString::fromUtf8(listed ? "★" : "☆"));
+    }
     p.fillRect(QRectF(2, top + pitch - 1, W - 3, 1), theme::map("#1e1a0f"));
   }
   p.restore();
@@ -847,11 +880,19 @@ void RegistryPanel::paintEvent(QPaintEvent*) {
 void RegistryPanel::mouseMoveEvent(QMouseEvent* e) {
   int h = -1; const auto tr = tabRects();
   for (int i = 0; i < tr.size(); ++i) if (tr[i].contains(e->position())) h = i;
-  setCursor(h >= 0 ? Qt::PointingHandCursor : Qt::ArrowCursor);
-  if (h != m_hoverTab) { m_hoverTab = h; update(); }
+  const int row = rowAt(e->position());
+  const bool star = row >= 0 && starRect(row).contains(e->position());
+  setCursor(h >= 0 || star ? Qt::PointingHandCursor : Qt::ArrowCursor);
+  m_mouse = e->position();
+  if (h != m_hoverTab || row != m_hoverRow || star) { m_hoverTab = h; m_hoverRow = row; update(); }
+  else if (row >= 0) update(starRect(row).toAlignedRect().adjusted(-2, -2, 2, 2));
 }
-void RegistryPanel::leaveEvent(QEvent*) { if (m_hoverTab >= 0) { m_hoverTab = -1; update(); } }
+void RegistryPanel::leaveEvent(QEvent*) { m_hoverTab = -1; m_hoverRow = -1; m_mouse = {-1, -1}; update(); }
 void RegistryPanel::mousePressEvent(QMouseEvent* e) {
+  if (const int row = rowAt(e->position()); row >= 0 && starRect(row).contains(e->position())) {
+    macro::Watchlist::instance().toggle(rows()[row].iso2);
+    return;
+  }
   const auto tr = tabRects();
   for (int i = 0; i < tr.size(); ++i)
     if (tr[i].contains(e->position()) && i != m_tab) {
@@ -862,8 +903,11 @@ bool RegistryPanel::event(QEvent* e) {
   if (e->type() == QEvent::ToolTip) {
     auto* he = static_cast<QHelpEvent*>(e);
     const auto rs = rows();
-    const int k = int(std::floor((he->pos().y() - 63 + m_scroll) / 31.7));
-    if (he->pos().y() > 63 && k >= 0 && k < rs.size() && !rs[k].bankName.isEmpty()) QToolTip::showText(he->globalPos(), rs[k].bankName, this);
+    const int k = rowAt(he->pos());
+    if (k >= 0 && starRect(k).contains(he->pos()))
+      QToolTip::showText(he->globalPos(), macro::Watchlist::instance().contains(rs[k].iso2) ? QCoreApplication::translate("global", "Remove from the watchlist")
+                                                                                          : QCoreApplication::translate("global", "Add to the watchlist"), this);
+    else if (k >= 0 && !rs[k].bankName.isEmpty()) QToolTip::showText(he->globalPos(), rs[k].bankName, this);
     else QToolTip::hideText();
     return true;
   }

@@ -674,6 +674,8 @@ void Engine::runClaude(bool freshSession) {
   if (!claudecode::model().isEmpty()) args << "--model" << claudecode::model();
   if (!claudecode::effort().isEmpty()) args << "--effort" << claudecode::effort();
 
+  args = claudecode::withoutUnsupported(args);   // options this Claude Code refused earlier (an older version)
+
   m_cc = new dw::Process(this);
   m_ccBuf.clear(); m_ccErr.clear();
   m_ccThinking = false; m_ccResult = false; m_ccStopped = false; m_ccCalls = 0;
@@ -781,6 +783,12 @@ void Engine::onClaudeFinished(int code, dw::Process::ExitStatus st) {
   m_cc = nullptr;
   const QString err = QString::fromUtf8(m_ccErr).trimmed();
   // the saved session is gone (Claude Code's history cleaned up): start a new one once, the question stays
+  // an older Claude Code that does not know an optional option: ask again without it (once per option)
+  if (!m_ccResult && !m_ccStopped && claudecode::markUnsupported(err)) {
+    if (!m_messages.isEmpty() && m_messages.last().role == "assistant" && m_messages.last().text.isEmpty()) m_messages.removeLast();
+    runClaude(false);
+    return;
+  }
   if (!m_ccResult && !m_ccStopped && !m_ccRetried && err.contains("No conversation found")) {
     m_ccRetried = true;
     if (!m_messages.isEmpty() && m_messages.last().role == "assistant" && m_messages.last().text.isEmpty()) m_messages.removeLast();
@@ -798,6 +806,8 @@ void Engine::onClaudeFinished(int code, dw::Process::ExitStatus st) {
   if (m_ccResult || m_ccStopped) { setState(State::Ready); return; }
   QString why = st == dw::Process::CrashExit ? QCoreApplication::translate("ai", "Claude Code stopped unexpectedly.")
                                           : QCoreApplication::translate("ai", "Claude Code exited (code %1).").arg(code);
+  if (const QString opt = claudecode::unknownOption(err); !opt.isEmpty())   // a required option: too old to run safely
+    why += "\n" + QCoreApplication::translate("ai", "This Claude Code is too old for Deepwater (it does not know %1). Update it: run `claude update` in a terminal.").arg(opt);
   const QString tail = err.section('\n', -3);
   if (!tail.isEmpty()) why += "\n" + tail;
   setState(State::Failed, why);

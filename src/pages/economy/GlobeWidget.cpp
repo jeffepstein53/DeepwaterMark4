@@ -268,9 +268,13 @@ void GlobeWidget::mouseReleaseEvent(QMouseEvent* e) {
   const bool wasDrag = m_dragging && (e->position() - m_dragFrom).manhattanLength() > 4;
   m_dragging = false; m_idle.restart();
   if (!m_timer.isActive() && isVisible()) { m_clock.restart(); m_timer.start(); }
-  if (wasDrag) return;
+  if (wasDrag || e->button() != Qt::LeftButton) return;   // the right button opens the page's menu (watchlist)
   double la, lo;
   if (toLatLon(e->position(), &la, &lo)) { const QString iso = countryAt(la, lo); if (!iso.isEmpty()) emit clicked(iso); }
+}
+QString GlobeWidget::countryAtPoint(const QPointF& pos) const {
+  double la, lo;
+  return toLatLon(pos, &la, &lo) ? countryAt(la, lo) : QString();
 }
 void GlobeWidget::leaveEvent(QEvent*) {
   if (!m_hover.isEmpty()) { m_hover.clear(); emit hovered({}); update(); }

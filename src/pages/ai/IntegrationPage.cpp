@@ -1,5 +1,7 @@
 // AI › LLM › Integration: Claude Code (ai::claudecode). Left: is it installed, signed in, which model and effort it uses.
-// Right: the four AI › Agents environments, to load Claude Code into one (or eject it), and what it may do there.
+// Middle: the four AI › Agents environments, to load Claude Code into one (or eject it), and what it may do there.
+// Right (2026-11-21): Deepwater in Claude — the MCP server for Claude Code and Claude Desktop started by the user
+// (ai::McpServer external endpoint + ai/McpBridge.h): on/off, and adding it to each client.
 // It can also be dragged onto a cube from the list of AI › Agents.
 // Phones (pages/ai/PhoneScroll.h): one column (Claude Code, then the environments), the model and effort choices in
 // combo boxes, 34 px buttons; the page scrolls. On iOS no program can be started: Claude Code shows "not found".
@@ -7,6 +9,8 @@
 #include "pages/ai/PhoneScroll.h"
 #include "ai/ClaudeCode.h"
 #include "ai/Slots.h"
+#include "ai/McpServer.h"
+#include "ai/McpBridge.h"
 #include "ui/Kit.h"
 #include "ui/Theme.h"
 #include <QCoreApplication>
@@ -16,6 +20,9 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QDir>
+#include <QFileInfo>
+#include <QPointer>
 
 namespace aipage {
 namespace {
@@ -43,6 +50,7 @@ QLabel* text(const QString& s, const QFont& f, const QColor& c, QWidget* p, bool
 class IntegrationPage : public QWidget {
 public:
   explicit IntegrationPage(QWidget* parent) : QWidget(parent), m_scroll(this) {
+    m_scroll.desktopMin = kDesktop;
     const auto& c = theme::pal();
     auto* root = new QVBoxLayout(this);
     m_root = root;
@@ -146,9 +154,75 @@ public:
     cubes->body()->addStretch(1);
     body->addWidget(cubes, 5);
 
+    // ---------------------------------------------------------------- right: Deepwater in Claude (MCP)
+    auto* ext = new ui::Panel(QCoreApplication::translate("ai", "Deepwater in Claude"), this);
+    ext->body()->addWidget(text(QCoreApplication::translate("ai",
+        "Your own Claude Code or Claude Desktop can read Deepwater's data while the app is open: markets, news, calendar, "
+        "economy, positioning (the \"Read Deepwater's data\" tools, never the Sources and AI pages, keys or passwords)."),
+        theme::sans(12), c.textDim, ext, true));
+    auto* swRow = new QHBoxLayout;
+    m_extSwitch = button(QString(), true, ext);
+    connect(m_extSwitch, &QPushButton::clicked, this, [] {
+      auto& m = ai::McpServer::instance();
+      m.setExternalEnabled(!m.externalEnabled());
+    });
+    swRow->addWidget(m_extSwitch);
+    m_extState = text(QString(), theme::mono(11), c.textDim, ext, true);
+    swRow->addWidget(m_extState, 1);
+    ext->body()->addLayout(swRow);
+    ext->body()->addSpacing(6);
+    auto* clients = new QGridLayout; clients->setHorizontalSpacing(12); clients->setVerticalSpacing(8);
+    clients->addWidget(text(QStringLiteral("CLAUDE CODE"), theme::mono(11, QFont::Bold, 1.6), c.accentText, ext), 0, 0);
+    m_ccState = text(QString(), theme::mono(11), c.textDim, ext);
+    clients->addWidget(m_ccState, 0, 1);
+    m_ccButton = button(QString(), false, ext);
+    connect(m_ccButton, &QPushButton::clicked, this, [this] {
+      m_ccButton->setEnabled(false);
+      m_ccError.clear();
+      ai::mcpbridge::setInClaudeCode(!ai::mcpbridge::inClaudeCode(), [self = QPointer<IntegrationPage>(this)](bool ok, QString err) {
+        if (!self) return;
+        if (!ok) self->m_ccError = err;
+        self->m_ccButton->setEnabled(true);
+        self->syncExternal();
+      });
+    });
+    clients->addWidget(m_ccButton, 0, 2, Qt::AlignRight);
+    clients->addWidget(text(QStringLiteral("CLAUDE DESKTOP"), theme::mono(11, QFont::Bold, 1.6), c.accentText, ext), 1, 0);
+    m_cdState = text(QString(), theme::mono(11), c.textDim, ext);
+    clients->addWidget(m_cdState, 1, 1);
+    m_cdButton = button(QString(), false, ext);
+    connect(m_cdButton, &QPushButton::clicked, this, [this] {
+      QString err;
+      m_cdError.clear();
+      if (!ai::mcpbridge::setInClaudeDesktop(!ai::mcpbridge::inClaudeDesktop(), &err)) m_cdError = err;
+      else m_cdError = QCoreApplication::translate("ai", "Restart Claude Desktop for the change to apply.");
+      syncExternal();
+    });
+    clients->addWidget(m_cdButton, 1, 2, Qt::AlignRight);
+    clients->setColumnStretch(1, 1);
+    ext->body()->addLayout(clients);
+    m_extNote = text(QString(), theme::sans(11), c.warn, ext, true);
+    ext->body()->addWidget(m_extNote);
+    ext->body()->addSpacing(6);
+    ext->body()->addWidget(text(QCoreApplication::translate("ai",
+        "The clients start Deepwater's bridge (%1 --mcp-stdio), which talks to this open app on 127.0.0.1 with a key it "
+        "reads from a private file: no key is written into their settings. At most %2 calls a minute; each one is noted in "
+        "the journal (%3), not the data. ML and backtests stay with the cubes.")
+        .arg(QFileInfo(ai::mcpbridge::program()).fileName()).arg(ai::McpServer::kExtPerMinute)
+        .arg(QDir::toNativeSeparators(QFileInfo(ai::McpServer::connectionFile()).absolutePath() + "/journal.jsonl")),
+        theme::sans(11), c.textMute, ext, true));
+    ext->body()->addSpacing(4);
+    ext->body()->addWidget(text(QCoreApplication::translate("ai",
+        "What the tools read is sent to Anthropic with your questions, as with any Claude conversation."),
+        theme::sans(12), c.warn, ext, true));
+    ext->body()->addStretch(1);
+    body->addWidget(ext, 5);
+    connect(&ai::McpServer::instance(), &ai::McpServer::externalChanged, this, [this] { syncExternal(); });
+
     connect(&ai::claudecode::Probe::instance(), &ai::claudecode::Probe::changed, this, [this] { sync(); m_scroll.relayout(); });
     connect(&ai::Slots::instance(), &ai::Slots::changed, this, [this] { sync(); });
     sync();
+    syncExternal();
     // phones and short windows: the content's own height (the wrapped texts at this width), the page scrolls
     m_scroll.height = [this](int w, int) { return layoutHeight(m_root, w); };
   }
@@ -159,13 +233,14 @@ protected:
   // layouts measured differently), the real size arrives with the show.
   void resizeEvent(QResizeEvent*) override {
     if (!isVisible()) return;
-    setPhone(ui::compact(width()));
+    setPhone(ui::compact(width(), kDesktop));
     m_scroll.resize();
   }
   void showEvent(QShowEvent*) override {
     resizeEvent(nullptr);
     const auto& st = ai::claudecode::Probe::instance().status();
     if (!st.checking) ai::claudecode::Probe::instance().refresh();   // re-read each visit: it may have been installed meanwhile
+    syncExternal();   // added or removed from a terminal meanwhile
   }
 
 private:
@@ -180,7 +255,7 @@ private:
     m_model->setVisible(!on); m_modelBox->setVisible(on);
     m_effort->setVisible(!on); m_effortBox->setVisible(on);
     QList<QPushButton*> buttons = m_load;
-    buttons << m_recheck;
+    buttons << m_recheck << m_extSwitch << m_ccButton << m_cdButton;
     for (auto* b : buttons) b->setMinimumHeight(on ? 34 : 0);
     for (auto* l : m_holds) l->setMinimumWidth(on ? 40 : 0);   // a long model name is cut instead of widening the row
   }
@@ -224,6 +299,39 @@ private:
     }
   }
 
+  // three columns need about 1100 px; narrower, one column that scrolls
+  static constexpr int kDesktop = 1100;
+  void syncExternal() {
+    const auto& c = theme::pal();
+    auto& m = ai::McpServer::instance();
+    const bool on = m.externalEnabled();
+    m_extSwitch->setText(on ? QCoreApplication::translate("ai", "SWITCH OFF") : QCoreApplication::translate("ai", "SWITCH ON"));
+    m_extState->setText(on ? QCoreApplication::translate("ai", "served while Deepwater is open · %n call(s) since launch", nullptr, m.externalCalls())
+                           : QCoreApplication::translate("ai", "off: no Claude outside Deepwater can read its data"));
+    m_extState->setStyleSheet(QString("color:%1;background:transparent;").arg((on ? c.up : c.textMute).name()));
+    const bool cc = ai::mcpbridge::inClaudeCode(), cdInstalled = !ai::mcpbridge::claudeDesktopConfig().isEmpty(),
+               cd = ai::mcpbridge::inClaudeDesktop();
+    const bool ccInstalled = !ai::claudecode::binary().isEmpty();
+    m_ccState->setText(!ccInstalled ? QCoreApplication::translate("ai", "not installed") : cc ? QCoreApplication::translate("ai", "added")
+                                                                                              : QCoreApplication::translate("ai", "not added"));
+    m_ccState->setStyleSheet(QString("color:%1;background:transparent;").arg((cc ? c.up : c.textMute).name()));
+    m_ccButton->setText(cc ? QCoreApplication::translate("ai", "REMOVE") : QCoreApplication::translate("ai", "ADD"));
+    m_ccButton->setVisible(ccInstalled);
+    m_cdState->setText(!cdInstalled ? QCoreApplication::translate("ai", "not installed") : cd ? QCoreApplication::translate("ai", "added")
+                                                                                             : QCoreApplication::translate("ai", "not added"));
+    m_cdState->setStyleSheet(QString("color:%1;background:transparent;").arg((cd ? c.up : c.textMute).name()));
+    m_cdButton->setText(cd ? QCoreApplication::translate("ai", "REMOVE") : QCoreApplication::translate("ai", "ADD"));
+    m_cdButton->setVisible(cdInstalled);
+    QStringList notes;
+    if (!m_ccError.isEmpty()) notes << "Claude Code: " + m_ccError;
+    if (!m_cdError.isEmpty()) notes << "Claude Desktop: " + m_cdError;
+    if (!on && (cc || cd)) notes << QCoreApplication::translate("ai", "Added but switched off: the client will say Deepwater is not reachable.");
+    m_extNote->setText(notes.join('\n'));
+    m_extNote->setVisible(!notes.isEmpty());
+  }
+  QPushButton *m_extSwitch, *m_ccButton, *m_cdButton;
+  QLabel *m_extState, *m_ccState, *m_cdState, *m_extNote;
+  QString m_ccError, m_cdError;
   QLabel *m_path, *m_version, *m_account, *m_install;
   QPushButton* m_recheck;
   ui::PillBar *m_model, *m_effort;

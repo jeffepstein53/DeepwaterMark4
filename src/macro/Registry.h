@@ -15,7 +15,8 @@
 namespace macro {
 
 enum class Region { America, Europe, Africa, Asia, Oceania };
-enum class Group { G20, America, Europe, Africa, Asia, Oceania };
+enum class Group { G20, America, Europe, Africa, Asia, Oceania, Watch };   // Watch: the user's list (macro/Watchlist.h)
+constexpr int kGroupCount = 7;
 
 struct Economy {
   QString iso2;       // "us"; the euro area is "ez" (flag "eu")

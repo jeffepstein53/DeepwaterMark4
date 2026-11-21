@@ -26,11 +26,12 @@ public:
   explicit PhoneScroll(QWidget* page) : m_page(page) {}
   // content height in scroll mode for this width and viewport height (the scroller keeps at least the viewport's)
   std::function<int(int w, int vh)> height;
-  static bool wanted(int w, int h) { return ui::compact(w) || (w > 0 && h > 0 && h < 420); }
+  int desktopMin = 0;   // the page's desktop width: narrower, it scrolls in its phone layout (ui::compact(w, min))
+  static bool wanted(int w, int h, int min = 0) { return ui::compact(w, min) || (w > 0 && h > 0 && h < 420); }
   bool scrolling() const { return m_scroll != nullptr; }
   // from the page's resizeEvent
   void resize() {
-    const bool on = wanted(m_page->width(), m_page->height());
+    const bool on = wanted(m_page->width(), m_page->height(), desktopMin);
     if (on != scrolling()) {
       if (on) {
         auto* content = new QWidget;

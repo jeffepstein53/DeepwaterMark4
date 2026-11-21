@@ -1,5 +1,7 @@
 #include "app/OptionsDialog.h"
 #include "core/I18n.h"
+#include "app/Zoom.h"
+#include "core/Settings.h"
 #include "ui/Kit.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
@@ -30,13 +32,14 @@ protected:
   void mouseReleaseEvent(QMouseEvent*) override { m_dragging = false; }
   void leaveEvent(QEvent*) override { if (m_hover != None) { m_hover = None; update(); } }
 private:
-  enum Hit { None, Close, LangEn, LangFr, ThemeFirst = 100 };
+  enum Hit { None, Close, LangEn, LangFr, Restart, ZoomFirst = 50, ThemeFirst = 100 };
   struct Area { QRectF r; int id; };
   struct Layout {
     bool narrow = false;
     qreal pad = 26;
     QRectF close, langHint, themeHint, footer;
-    qreal langLabelY = 0, themeLabelY = 0;
+    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0;
+    QRectF zoomHint;
     QList<Area> areas;
     int height = 0;
   };
@@ -47,6 +50,11 @@ private:
   }
   int m_hover = None;
   QPointF m_dragFrom; bool m_dragging = false;
+  static QString zoomHintText() {
+    return zoom::saved() == zoom::active()
+               ? otr("Size of the whole interface. A new zoom applies when Deepwater restarts (Cmd+= / Cmd+- / Cmd+0).")
+               : otr("Size of the whole interface. %1 % is chosen: it applies when Deepwater restarts.").arg(zoom::saved());
+  }
 };
 
 Body::Layout Body::layout(int w) const {
@@ -67,6 +75,19 @@ Body::Layout Body::layout(int w) const {
   const qreal half = (inner - 10) / 2.0;
   L.areas << Area{QRectF(pad, y, half, 46), LangEn} << Area{QRectF(pad + half + 10, y, half, 46), LangFr};
   y += 46 + 38;
+  // zoom: five levels on one row; RESTART NOW under them while the chosen level waits for a restart
+  L.zoomLabelY = y;
+  const qreal zh = std::max<qreal>(22, hintH(zoomHintText()));
+  L.zoomHint = QRectF(pad, y + 6, inner, zh);
+  y = L.zoomHint.bottom() + 6;
+  const int nz = int(zoom::levels().size());
+  const qreal zw = (inner - 8 * (nz - 1)) / nz;
+  for (int i = 0; i < nz; ++i) L.areas << Area{QRectF(pad + i * (zw + 8), y, zw, 40), ZoomFirst + i};
+  y += 40;
+#ifndef Q_OS_IOS
+  if (zoom::saved() != zoom::active()) { L.areas << Area{QRectF(pad, y + 10, std::min<qreal>(inner, 240), 34), Restart}; y += 44; }
+#endif
+  y += 38;
   // theme
   L.themeLabelY = y;
   const qreal th = std::max<qreal>(22, hintH(otr("Colours of the whole application. Hover a theme for its description.")));
@@ -123,6 +144,27 @@ void Body::paintEvent(QPaintEvent*) {
     p.drawText(a.r.adjusted(in, 0, 0, 0), Qt::AlignVCenter | Qt::AlignLeft, a.id == LangEn ? "ENGLISH" : "FRANÇAIS");
     p.setFont(theme::mono(10, QFont::Medium, 1.5)); p.setPen(on ? theme::alpha(c.accent, 170) : c.textMute);
     p.drawText(a.r.adjusted(0, 0, -in, 0), Qt::AlignVCenter | Qt::AlignRight, a.id == LangEn ? "EN" : "FR");
+  }
+
+  // zoom
+  section(L.zoomLabelY, otr("ZOOM"), L.zoomHint, zoomHintText());
+  for (const auto& a : L.areas) {
+    if (a.id == Restart) {
+      const bool hov = a.id == m_hover;
+      p.setPen(QPen(c.accent, 1)); p.setBrush(hov ? c.accent : c.accentDim);
+      p.drawRoundedRect(a.r.adjusted(.5, .5, -.5, -.5), 3, 3);
+      p.setFont(theme::mono(11, QFont::Bold, 1.5)); p.setPen(hov ? theme::onAccent() : c.accent);
+      p.drawText(a.r, Qt::AlignCenter, otr("RESTART NOW"));
+      continue;
+    }
+    if (a.id < ZoomFirst || a.id >= ThemeFirst) continue;
+    const int lvl = zoom::levels()[a.id - ZoomFirst];
+    const bool on = lvl == zoom::saved(), hov = a.id == m_hover;
+    p.setPen(QPen(on ? c.accent : hov ? c.borderHi : c.border, 1));
+    p.setBrush(on ? c.accentDim : hov ? c.panelAlt : theme::map("#0e0a05"));
+    p.drawRoundedRect(a.r.adjusted(.5, .5, -.5, -.5), 3, 3);
+    p.setFont(theme::mono(12, QFont::Bold, 1.0)); p.setPen(on ? c.accent : hov ? c.text : c.textDim);
+    p.drawText(a.r, Qt::AlignCenter, QString("%1 %").arg(lvl));
   }
 
   // theme
@@ -193,6 +235,12 @@ void Body::mousePressEvent(QMouseEvent* e) {
   if (h == Close) { if (auto* d = qobject_cast<QDialog*>(window())) d->accept(); return; }
   if (h == LangEn) i18n::setLanguage(i18n::Lang::English);
   else if (h == LangFr) i18n::setLanguage(i18n::Lang::French);
+  else if (h == Restart) zoom::restart();
+  else if (h >= ZoomFirst && h < ThemeFirst) {
+    // the choice is saved here; the button under the row restarts (no question while the dialog is open)
+    settings::setValue("ui.zoom", zoom::levels()[h - ZoomFirst]);
+    if (auto* d = qobject_cast<OptionsDialog*>(window())) d->fit();
+  }
   else if (h >= ThemeFirst) theme::setCurrent(theme::themes()[h - ThemeFirst].id);
   update();
 }

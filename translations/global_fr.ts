@@ -990,5 +990,21 @@ La somme des huit valeurs est proche de zéro. Double-cliquez sur le graphique p
         <source>%1 your time</source>
         <translation>%1 votre heure</translation>
     </message>
+    <message>
+        <source>☆ WATCH</source>
+        <translation>☆ SUIVI</translation>
+    </message>
+    <message>
+        <source>Your watchlist is empty. Add a country with the ☆ of its row in the other tabs.</source>
+        <translation>Votre liste de suivi est vide. Ajoutez un pays avec le ☆ de sa ligne dans les autres onglets.</translation>
+    </message>
+    <message>
+        <source>Remove from the watchlist</source>
+        <translation>Retirer de la liste de suivi</translation>
+    </message>
+    <message>
+        <source>Add to the watchlist</source>
+        <translation>Ajouter à la liste de suivi</translation>
+    </message>
 </context>
 </TS>

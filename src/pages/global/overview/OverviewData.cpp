@@ -1,3 +1,4 @@
+#include "macro/Watchlist.h"
 #include "pages/global/overview/OverviewData.h"
 #include "core/I18n.h"
 #include <QCoreApplication>
@@ -125,6 +126,7 @@ OverviewData::OverviewData(SquawkPanel* sq, RiskPanel* risk, CentralBanksPanel* 
   pushRisk();
   pushBanks();
   pushRegistry();
+  connect(&macro::Watchlist::instance(), &macro::Watchlist::changed, this, [this] { pushRegistry(); });
   if (m_sq->french()) translateMissing();
 }
 
@@ -301,7 +303,7 @@ void OverviewData::pushBanks() {
 void OverviewData::pushRegistry() {
   Registry reg;
   for (macro::Group g : {macro::Group::G20, macro::Group::America, macro::Group::Europe, macro::Group::Africa,
-                         macro::Group::Asia, macro::Group::Oceania}) {
+                         macro::Group::Asia, macro::Group::Oceania, macro::Group::Watch}) {
     QList<RegistryRow> rows;
     for (const macro::Economy& e : macro::registry(g)) {
       RegistryRow r;

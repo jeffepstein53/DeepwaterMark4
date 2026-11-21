@@ -13,14 +13,16 @@
 //   r.notes("ing")                                  // one bank's notes
 //   r.fetchPdf(note.id, this, [](QString file, QString err) { … });   // cached under paths::cache("banks")
 //
-// Only banks whose terms allow reuse are read (banks::Use::Full in Registry.h). The library is an archive under
+// Only banks whose terms allow reuse are read (banks::Use::Full in Registry.h); for JPM, BofA, Goldman Sachs and Morgan
+// Stanley (links only), their public podcast and YouTube feeds: titles, dates, short summaries and links. The library is an archive under
 // paths::data("banks")/notes.json: feeds only show their latest items, the archive keeps what was seen before.
 namespace banks {
 
 struct Note {
   QString id;            // stable id (hash of the URL)
   QString bankId;        // banks::Bank id
-  QString type;          // publication type, uppercase: ARTICLE, SNAP, OPINION, REPORT, FORECASTS
+  QString type;          // publication type, uppercase: ARTICLE, SNAP, OPINION, REPORT, FORECASTS, PODCAST, VIDEO
+                         // (PODCAST / VIDEO: the US banks' public feeds; topic = the show, url = episode or video)
   QString topic;         // the bank's own topic tag ("Czech Republic", "FX"), may be empty
   QString title;
   QString summary;       // the feed's teaser, may be empty
@@ -52,6 +54,7 @@ private:
   void merge(const QList<Note>& incoming);
   void readIngRss(const QByteArray& body);
   void readIngListing(const QByteArray& body);
+  void readFeed(const QString& bank, const QString& show, bool video, const QByteArray& body);
   QHash<QString, Note> m_notes;
   QDateTime m_last, m_lastPoll;
 };

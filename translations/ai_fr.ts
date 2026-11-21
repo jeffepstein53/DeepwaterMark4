@@ -4367,5 +4367,92 @@ Fait : étape 1, supervisé ; étape 2, non supervisé ; étape 3, semi- et auto
         <source>order flow: the %1 bars it covers (%2 others left out)</source>
         <translation>flux d’ordres : les %1 bougies qu’il couvre (%2 autres écartées)</translation>
     </message>
+    <message>
+        <source>This Claude Code is too old for Deepwater (it does not know %1). Update it: run `claude update` in a terminal.</source>
+        <translation>Ce Claude Code est trop ancien pour Deepwater (il ne connaît pas %1). Mettez-le à jour : lancez `claude update` dans un terminal.</translation>
+    </message>
+    <message>
+        <source>Not available on this device.</source>
+        <translation>Indisponible sur cet appareil.</translation>
+    </message>
+    <message>
+        <source>Claude Code is not installed on this computer.</source>
+        <translation>Claude Code n&apos;est pas installé sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Claude Desktop is not installed on this computer.</source>
+        <translation>Claude Desktop n&apos;est pas installé sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>%1 is not valid JSON: fix it or add the entry by hand.</source>
+        <translation>%1 n&apos;est pas un JSON valide : corrigez-le ou ajoutez l&apos;entrée à la main.</translation>
+    </message>
+    <message>
+        <source>No bar of this timeframe had closed by the evaluation moment.</source>
+        <translation>Aucune barre de cette unité de temps n&apos;était clôturée au moment de l&apos;évaluation.</translation>
+    </message>
+    <message>
+        <source>The list of verified packages could not be written next to the environment.</source>
+        <translation>La liste des paquets vérifiés n&apos;a pas pu être écrite à côté de l&apos;environnement.</translation>
+    </message>
+    <message>
+        <source>Deepwater in Claude</source>
+        <translation>Deepwater dans Claude</translation>
+    </message>
+    <message>
+        <source>Your own Claude Code or Claude Desktop can read Deepwater&apos;s data while the app is open: markets, news, calendar, economy, positioning (the &quot;Read Deepwater&apos;s data&quot; tools, never the Sources and AI pages, keys or passwords).</source>
+        <translation>Votre propre Claude Code ou Claude Desktop peut lire les données de Deepwater tant que l&apos;app est ouverte : marchés, actualités, calendrier, économie, positionnement (les outils « Lire les données de Deepwater », jamais les pages Sources et IA, les clés ou les mots de passe).</translation>
+    </message>
+    <message>
+        <source>Restart Claude Desktop for the change to apply.</source>
+        <translation>Redémarrez Claude Desktop pour appliquer le changement.</translation>
+    </message>
+    <message>
+        <source>The clients start Deepwater&apos;s bridge (%1 --mcp-stdio), which talks to this open app on 127.0.0.1 with a key it reads from a private file: no key is written into their settings. At most %2 calls a minute; each one is noted in the journal (%3), not the data. ML and backtests stay with the cubes.</source>
+        <translation>Les clients lancent le relais de Deepwater (%1 --mcp-stdio), qui parle à cette app ouverte sur 127.0.0.1 avec une clé lue dans un fichier privé : aucune clé n&apos;est écrite dans leurs réglages. Au plus %2 appels par minute ; chacun est noté dans le journal (%3), pas les données. Le ML et les backtests restent réservés aux cubes.</translation>
+    </message>
+    <message>
+        <source>What the tools read is sent to Anthropic with your questions, as with any Claude conversation.</source>
+        <translation>Ce que lisent les outils est envoyé à Anthropic avec vos questions, comme dans toute conversation avec Claude.</translation>
+    </message>
+    <message>
+        <source>SWITCH OFF</source>
+        <translation>DÉSACTIVER</translation>
+    </message>
+    <message>
+        <source>SWITCH ON</source>
+        <translation>ACTIVER</translation>
+    </message>
+    <message>
+        <source>off: no Claude outside Deepwater can read its data</source>
+        <translation>désactivé : aucun Claude hors de Deepwater ne peut lire ses données</translation>
+    </message>
+    <message>
+        <source>added</source>
+        <translation>ajouté</translation>
+    </message>
+    <message>
+        <source>not added</source>
+        <translation>non ajouté</translation>
+    </message>
+    <message>
+        <source>REMOVE</source>
+        <translation>RETIRER</translation>
+    </message>
+    <message>
+        <source>ADD</source>
+        <translation>AJOUTER</translation>
+    </message>
+    <message>
+        <source>Added but switched off: the client will say Deepwater is not reachable.</source>
+        <translation>Ajouté mais désactivé : le client dira que Deepwater est injoignable.</translation>
+    </message>
+    <message numerus="yes">
+        <source>served while Deepwater is open · %n call(s) since launch</source>
+        <translation>
+            <numerusform>servi tant que Deepwater est ouvert · %n appel depuis le lancement</numerusform>
+            <numerusform>servi tant que Deepwater est ouvert · %n appels depuis le lancement</numerusform>
+        </translation>
+    </message>
 </context>
 </TS>

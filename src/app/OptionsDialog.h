@@ -6,7 +6,7 @@
 class QScrollArea;
 namespace options { class Body; }
 
-// Options (gear at the right of the header, Cmd+,): interface language (English / Français) and theme
+// Options (gear at the right of the header, Cmd+,): interface language (English / Français), zoom (app/Zoom.h) and theme
 // (Deepwater and the nine themes of preview.html, in a 2-column grid). Changes apply immediately and are saved (ui.language, ui.theme).
 // Its width follows the main window (640 at most; a phone: the screen's width less a margin) and its content scrolls
 // when the window is shorter than it (a phone turned).

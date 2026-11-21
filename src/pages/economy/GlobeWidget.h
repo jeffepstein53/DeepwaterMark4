@@ -25,6 +25,7 @@ public:
   void setTint(const QHash<QString, int>& alphaByIso);   // subtle fills per country (cadence filters)
   void resetView();
   void setRadiusHint(double frac) { m_radiusFrac = frac; update(); }
+  QString countryAtPoint(const QPointF& pos) const;   // ISO-2 of the country under that point, "" off the land
 signals:
   void hovered(const QString& iso2);               // "" when off any country
   void clicked(const QString& iso2);

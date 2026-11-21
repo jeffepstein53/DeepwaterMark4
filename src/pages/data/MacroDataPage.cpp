@@ -769,7 +769,7 @@ protected:
   // a phone upright or a page this short (phone sideways) scrolls. Wider and taller, the desktop layout as it was.
   void resizeEvent(QResizeEvent* e) override {
     QWidget::resizeEvent(e);
-    const bool phone = ui::compact(width());
+    const bool phone = ui::compact(width(), 940);   // desktop layout from 925 px (layout audit 2026-11-21)
     setPhone(phone);
     setScroll(phone || height() < 420);
     if (m_pageScroll) m_pageScroll->relayout();

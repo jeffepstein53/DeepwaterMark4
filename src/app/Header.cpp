@@ -43,6 +43,9 @@ qreal tabsWidth(qreal pad, qreal sp) {
   for (const auto& t : app::tabs()) w += fm.horizontalAdvance(app::label(t.label).toUpper()) + pad + 4;
   return w;
 }
+bool fitsTabs(const Fit& f, qreal width) {
+  return tabsStart(f.word) + tabsWidth(f.pad, f.sp) + 24 <= width - 16 - kGearW - kHelpW - kUpdateW - clockWidth(f.clock);
+}
 Fit fitFor(qreal width) {
   for (const auto& f : kFits)
     if (tabsStart(f.word) + tabsWidth(f.pad, f.sp) + 24 <= width - 16 - kGearW - kHelpW - kUpdateW - clockWidth(f.clock)) return f;
@@ -154,7 +157,10 @@ QList<Header::Hit> Header::hits() const {
 }
 
 // a phone upright (narrow), or turned (low: the two rows would take a fifth of the height)
-bool Header::isCompact() const { return ui::compact(width()) || (window() && window()->height() < 500); }
+// the menu ☰ also when the tabs do not fit on one row even in the tightest fit (a narrow window in French)
+bool Header::isCompact() const {
+  return ui::compact(width()) || !fitsTabs(kFits[std::size(kFits) - 1], width()) || (window() && window()->height() < 500);
+}
 
 void Header::syncHeight() {
   const int h = isCompact() ? kCompactHeight : kHeight;

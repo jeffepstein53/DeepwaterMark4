@@ -147,6 +147,7 @@ private:
 class AiModelsPage : public QWidget {
 public:
   explicit AiModelsPage(QWidget* parent) : QWidget(parent), m_scroll(this) {
+    m_scroll.desktopMin = 920;
     const auto& c = theme::pal();
     auto& hub = ai::ModelHub::instance();
     auto* root = new QVBoxLayout(this);
@@ -261,7 +262,7 @@ protected:
   // layouts measured differently), the real size arrives with the show.
   void resizeEvent(QResizeEvent*) override {
     if (!isVisible()) return;
-    setPhone(ui::compact(width()));
+    setPhone(ui::compact(width(), 920));   // desktop layout from 901 px (layout audit 2026-11-21)
     m_scroll.resize();
   }
   void showEvent(QShowEvent*) override {

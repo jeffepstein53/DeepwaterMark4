@@ -1,4 +1,5 @@
 #include "macro/Registry.h"
+#include "macro/Watchlist.h"
 #include "ui/Kit.h"
 #include <QHash>
 #include <QPainter>
@@ -115,6 +116,10 @@ QList<Economy> registry(Group g) {
     for (const auto& c : order) if (const auto* e = economy(c)) out << *e;
     return out;
   }
+  if (g == Group::Watch) {
+    for (const auto& c : Watchlist::instance().codes()) if (const auto* e = economy(c)) out << *e;
+    return out;
+  }
   const Region r = g == Group::America ? Region::America : g == Group::Europe ? Region::Europe
                  : g == Group::Africa ? Region::Africa : g == Group::Asia ? Region::Asia : Region::Oceania;
   for (const auto& e : table()) if (e.region == r) out << e;
@@ -148,6 +153,7 @@ QString groupLabel(Group g) {
     case Group::Africa: return QCoreApplication::translate("economy", "AFRICA");
     case Group::Asia: return QCoreApplication::translate("economy", "ASIA");
     case Group::Oceania: return QCoreApplication::translate("economy", "OCEANIA");
+    case Group::Watch: return QString::fromUtf8("☆ ") + QCoreApplication::translate("economy", "WATCH");
   }
   return {};
 }

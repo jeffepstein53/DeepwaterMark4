@@ -2390,7 +2390,7 @@ private:
   enum Mode { Desktop, Phone, Short };
   static constexpr int kTouch = 34;   // finger height of fields and buttons on phones
   static Mode modeFor(const QSize& s) {
-    if (ui::compact(s.width())) return Phone;
+    if (ui::compact(s.width(), 1210)) return Phone;   // the three columns need 1198 px (layout audit 2026-11-21)
     return s.height() > 0 && s.height() < 420 ? Short : Desktop;
   }
   QList<QWidget*> touchTargets() const {
