@@ -32,6 +32,7 @@
 #include "app/Pages.h"
 #include <QAbstractButton>
 #include <QApplication>
+#include <QSystemTrayIcon>
 #include <QCoreApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -1918,6 +1919,19 @@ void ChartsApp::systemNotify(const QString& text, const QString& title) {
     dw::Process::startDetached("/usr/bin/osascript",
                             {"-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)",
                              "-e", "end run", text, title});
+#elif defined(Q_OS_WIN)
+  // Windows (native parity, 2026-11-22): a notification from Deepwater's icon in the notification area (made with the
+  // first alert, kept while the app runs: Windows 11 shows it as a toast and keeps it in the notification centre)
+  if (!qEnvironmentVariableIsEmpty("DW_PROFILE") || !QSystemTrayIcon::isSystemTrayAvailable()) return;   // never from tests
+  static QSystemTrayIcon* tray = nullptr;
+  if (!tray) {
+    QIcon icon = QApplication::windowIcon();
+    if (icon.isNull()) icon = QIcon(QStringLiteral(":/icon/deepwater.svg"));
+    tray = new QSystemTrayIcon(icon, qApp);
+    tray->setToolTip(QStringLiteral("Deepwater"));
+    tray->show();
+  }
+  tray->showMessage(title, text, QSystemTrayIcon::Information, 10000);
 #else
   Q_UNUSED(text);
   Q_UNUSED(title);

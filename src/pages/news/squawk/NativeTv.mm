@@ -43,6 +43,7 @@ NativeTv::NativeTv(QWidget* parent) : QObject(parent) {
 }
 
 bool NativeTv::available() const { return m_view != nullptr; }
+QString NativeTv::origin() const { return QStringLiteral("https://deepwater-terminal.com"); }
 
 void NativeTv::setVisible(bool on) {
   @autoreleasepool {

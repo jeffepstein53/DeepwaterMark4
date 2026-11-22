@@ -343,6 +343,12 @@ Use Open on YouTube.</source>
 Utilisez Ouvrir sur YouTube.</translation>
     </message>
     <message>
+        <source>The live player needs the system web view, and on Windows Charts&apos; local API (Charts settings).
+Use Open on YouTube.</source>
+        <translation>Le lecteur en direct nécessite la vue web du système et, sous Windows, l’API locale de Graphiques (réglages de Graphiques).
+Utilisez Ouvrir sur YouTube.</translation>
+    </message>
+    <message>
         <location filename="../src/pages/news/squawk/TvPane.cpp" line="115"/>
         <source>%1 has no live stream on YouTube right now.
 Try another channel, or Open on YouTube.</source>

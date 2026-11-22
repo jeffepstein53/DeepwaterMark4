@@ -71,10 +71,10 @@ void PdfDocView::setFile(const QString& file) {
   m_file = file;
   m_info = file.isEmpty() ? banks::pdf::Info{} : banks::pdf::info(file);
   m_img.clear(); m_pending.clear(); ++m_generation; m_imgScale = 0; m_rot = 0; m_fit = true;
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
   m_msg = (!file.isEmpty() && !m_info.ok()) ? QCoreApplication::translate("banks", "THIS FILE IS NOT A READABLE PDF") : QString();
 #else
-  // no PDF engine here yet (platform/NonApple.cpp): every file read as "not a readable PDF", which blamed the file
+  // no PDF engine on this platform (platform/NonApple.cpp): every file read as "not a readable PDF", which blamed the file
   m_msg = !file.isEmpty() ? QCoreApplication::translate("banks", "PDF PAGES ARE SHOWN ON MACOS AND IOS FOR NOW · SAVE THE FILE TO READ IT") : QString();
 #endif
   relayout();

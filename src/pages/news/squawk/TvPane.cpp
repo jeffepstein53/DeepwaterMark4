@@ -122,7 +122,7 @@ void TvPane::paintEvent(QPaintEvent*) {
   if (!m_tv || !m_tv->isVisible()) {
     p.setFont(theme::mono(11, QFont::Normal, 1)); p.setPen(theme::map("#6d6a62"));
     QString msg;
-    if (m_tv && !m_tv->available()) msg = QCoreApplication::translate("wire", "The live player needs the system web view (macOS for now).\nUse Open on YouTube.");
+    if (m_tv && !m_tv->available()) msg = QCoreApplication::translate("wire", "The live player needs the system web view, and on Windows Charts' local API (Charts settings).\nUse Open on YouTube.");
     else if (m_state.startsWith("error")) msg = QCoreApplication::translate("wire", "%1 has no live stream on YouTube right now.\nTry another channel, or Open on YouTube.").arg(m_channels[m_cur].name);
     else if (!m_playing) msg = qEnvironmentVariableIsSet("DW_SQUAWK_NO_TV") ? QStringLiteral("Player off (DW_SQUAWK_NO_TV)") : QCoreApplication::translate("wire", "Paused while the page is hidden");
     else msg = QCoreApplication::translate("wire", "Connecting to %1…").arg(m_channels[m_cur].name);
@@ -175,15 +175,16 @@ void TvPane::load() {
   const QString html = QString(R"(<!doctype html><html><head><meta charset="utf-8">
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:absolute;left:0;top:0;width:100%;height:100%;border:0}</style>
 </head><body><iframe id="v" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen
- src="https://www.youtube.com/embed/live_stream?channel=%1&autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=1&origin=https%3A%2F%2Fdeepwater-terminal.com"></iframe>
+ src="https://www.youtube.com/embed/live_stream?channel=%1&autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=1&origin=%2"></iframe>
 <script>
-function send(s){ try { window.webkit.messageHandlers.dw.postMessage(s); } catch (e) {} }
+var dwN = 0;
+function send(s){ try { window.webkit.messageHandlers.dw.postMessage(s); return; } catch (e) {} document.title = 'dw' + (++dwN) + ':' + s; }
 function onYouTubeIframeAPIReady(){ new YT.Player('v',{events:{
   onReady:function(e){ e.target.mute(); e.target.playVideo(); send('ready'); },
   onStateChange:function(e){ send('state:'+e.data); },
   onError:function(e){ send('error:'+e.data); } }}); }
 </script>
-<script src="https://www.youtube.com/iframe_api"></script></body></html>)").arg(id);
+<script src="https://www.youtube.com/iframe_api"></script></body></html>)").arg(id, QString::fromLatin1(QUrl::toPercentEncoding(m_tv->origin())));
   m_tv->loadHtml(html, QUrl("https://deepwater-terminal.com/tv/"));
   m_tv->setVisible(!m_clipped);
   layoutView();

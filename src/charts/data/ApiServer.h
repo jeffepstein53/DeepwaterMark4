@@ -47,6 +47,10 @@ public:
   // SSE to every /api/events client: "event: <type>\ndata: <JSON>\n\n" (Alerts::fired is broadcast as "alert").
   void broadcast(const QString& type, const QJsonValue& payload);
 
+  // A page of the app served at `path` (GET, text/html), e.g. the Squawk pane's YouTube player on Windows, where the
+  // web view cannot give a page an origin of its own (pages/news/squawk/NativeTvWin.cpp). Empty html removes it.
+  void setPage(const QString& path, const QByteArray& html);
+
   // Custom indicators (server.js listCustom / loadCustom): the folder paths::data("charts/custom").
   QJsonArray listCustom();                    // [{file, id, mtime, error|null}] in name order
   QString loadCustom(const QString& file);    // registers it; the error (also kept for listCustom) or empty
@@ -78,6 +82,7 @@ private:
   QHash<quint64, Client> clients_;
   quint64 nextClient_ = 0;
   QTimer* keepAlive_ = nullptr;
+  QHash<QString, QByteArray> pages_;   // setPage
 };
 
 // What the app does at launch (called from a Q_COREAPP_STARTUP_FUNCTION in ApiServer.cpp when the application is

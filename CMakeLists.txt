@@ -61,6 +61,11 @@ target_compile_definitions(Deepwater PRIVATE $<$<CXX_COMPILER_ID:MSVC>:NOMINMAX 
 if(WIN32)
   set_target_properties(Deepwater PROPERTIES WIN32_EXECUTABLE TRUE)
   target_link_libraries(Deepwater PRIVATE opengl32)   # Macro data's Landscape calls glClear / glClearColor directly
+  # Native parity with macOS (2026-11-22): Bank Research's PDF pages and printing (Qt PDF = PDFium, Qt Print Support;
+  # platform/WinPdf.cpp), the Squawk pane's live player (Qt WebView's WebView2 backend; NativeTvWin.cpp), and the RBA /
+  # RBNZ pictures read by Windows' own OCR through C++/WinRT (windowsapp; platform/WinOcr.cpp).
+  find_package(Qt6 REQUIRED COMPONENTS Pdf PrintSupport WebView)
+  target_link_libraries(Deepwater PRIVATE Qt6::Pdf Qt6::PrintSupport Qt6::WebView windowsapp)
 endif()
 # Hardening (audit 2026-11-18, B1; user's choice 2026-11-19): out-of-range accesses in the standard containers
 # (std::vector, std::span, std::string, std::optional…) and in Qt's (QList, QString…) stop the app at the faulty line

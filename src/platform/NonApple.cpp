@@ -1,7 +1,8 @@
-// What the macOS-only modules (banks/Pdf.mm, macro/Ocr.mm) give on the other platforms, as their headers promise:
-// empty results. Bank Research then shows no PDF pages and the RBA / RBNZ probability pictures are not read.
+// What the Apple modules (banks/Pdf.mm, macro/Ocr.mm) give where there is no engine, as their headers promise: empty
+// results. Windows has its own (platform/WinPdf.cpp, platform/WinOcr.cpp, 2026-11-22); this is left for other
+// platforms (Linux, not shipped). Bank Research then shows no PDF pages and the RBA / RBNZ pictures are not read.
 // (The Squawk pane's web view has its own stand-in, pages/news/squawk/NativeTvStub.cpp.)
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(_WIN32)
 #include "banks/Pdf.h"
 #include "macro/Ocr.h"
 

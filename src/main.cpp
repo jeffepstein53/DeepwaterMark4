@@ -1,5 +1,6 @@
 #include "ui/Touch.h"
 #include "core/Startup.h"
+#include "app/SelfTest.h"
 #include "app/MainWindow.h"
 #include "app/LayoutAudit.h"
 #include "app/PerfAudit.h"
@@ -75,8 +76,11 @@ int main(int argc, char** argv) {
                   {"delay", "ms", "ms", "6000"}, {"goto", "page", "page"}, {"goto-at", "ms", "ms", "5000"}, {"quit-after", "ms", "ms"}, {"layout-audit", "dir", "dir"},
                   {"audit-sizes", "WxH,...", "sizes", "1024x600,1280x720,1440x900,1728x1052"}, {"audit-pages", "ids", "ids"},
                   {"audit-load", "ms", "ms", "5000"}, {"perf-audit", "dir", "dir"}, {"perf-load", "ms", "ms", "6000"},
-                  {"perf-idle", "ms", "ms", "8000"}, {"complete-ml-references", "add the references to older ML runs, then quit"}});
+                  {"perf-idle", "ms", "ms", "8000"}, {"complete-ml-references", "add the references to older ML runs, then quit"},
+                  {"selftest", "check this platform's PDF and OCR engines, write the result (JSON) to file, then quit", "file"}});
   cli.parse(app.arguments());   // parse(), not process(): unknown flags are ignored
+  // --selftest: no window; the platform engines (PDF reader, OCR) checked end to end, for CI (app/SelfTest.h)
+  if (cli.isSet("selftest")) return app::selftest::run(cli.value("selftest"));
 
   // --complete-ml-references: no window; what the app does 20 s after launch for older ML runs (ml::Runs::completeReferences,
   // the trainer in its sandbox), for every run that needs it, then quits. The ML page is not opened, nothing else starts.

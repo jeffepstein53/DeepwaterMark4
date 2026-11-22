@@ -23,7 +23,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          modules: qthttpserver qtwebsockets
+          modules: qthttpserver qtwebsockets qtpdf qtwebview   # qtpdf: Bank Research's PDF pages; qtwebview: the Squawk player (WebView2)
           cache: true
           # Qt 6.11+ splits its Windows repository by compiler, which aqtinstall 3.3.0 (the last release on PyPI)
           # can't read; aqtinstall's master has the fix (PR #1000). Back to the default once 3.4 is out.
@@ -90,9 +90,13 @@ jobs:
           Expand-Archive $zip -DestinationPath smoke-app -Force
           $dir = (Get-ChildItem smoke-app -Directory | Select-Object -First 1).FullName
           Get-ChildItem $dir | Format-Table -AutoSize Mode, Length, Name | Out-String -Width 200
-          foreach ($f in 'Deepwater.exe', 'deepwater-llm.exe', 'Qt6Core.dll', 'Qt6HttpServer.dll', 'Qt6WebSockets.dll', 'qt.conf', 'msvcp140.dll') {
+          foreach ($f in 'Deepwater.exe', 'deepwater-llm.exe', 'Qt6Core.dll', 'Qt6HttpServer.dll', 'Qt6WebSockets.dll', 'Qt6Pdf.dll', 'Qt6PrintSupport.dll', 'Qt6WebView.dll', 'qt.conf', 'msvcp140.dll') {
             if (-not (Test-Path "$dir\$f")) { throw "$f isn't at the top of the packed folder" }
           }
+          # the Squawk player's backend is a plugin: windeployqt must have brought it
+          $wv = Get-ChildItem $dir -Recurse -Filter 'qtwebview_webview2.dll' | Select-Object -First 1
+          if (-not $wv) { throw "the WebView2 plugin (qtwebview_webview2.dll) isn't in the packed folder" }
+          "WebView2 plugin: $($wv.FullName.Substring($dir.Length))"
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem"
           Remove-Item Env:QT_PLUGIN_PATH, Env:QML2_IMPORT_PATH, Env:QT_ROOT_DIR -ErrorAction SilentlyContinue
           New-Item -ItemType Directory smoke -Force | Out-Null
@@ -114,6 +118,16 @@ jobs:
           if (-not (Test-Path $shot)) { throw "no screenshot" }
           "Screenshot: $((Get-Item $shot).Length) bytes"
 
+          # Windows' own engines behind Bank Research's PDF reader and the RBA / RBNZ OCR (app/SelfTest.h)
+          $st = "$PWD\smoke\selftest.json"
+          $stlog = "$PWD\smoke\selftest.log"
+          $q = Start-Process "$dir\Deepwater.exe" -PassThru -RedirectStandardError $stlog -ArgumentList '--selftest', "`"$st`""
+          $null = $q.Handle
+          if (-not $q.WaitForExit(120000)) { $q.Kill(); throw "--selftest didn't exit within 2 minutes" }
+          "--- selftest"; Get-Content $stlog -ErrorAction SilentlyContinue | Select-Object -Last 20
+          if (Test-Path $st) { Get-Content $st }
+          if ($q.ExitCode -ne 0) { throw "--selftest failed (exit code $($q.ExitCode))" }
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -121,6 +135,7 @@ jobs:
           path: |
             smoke/*.png
             smoke/*.log
+            smoke/*.json
           retention-days: 14
           if-no-files-found: ignore
 

@@ -650,6 +650,11 @@ Server::Server() {
   });
 }
 
+void Server::setPage(const QString& path, const QByteArray& html) {
+  if (html.isEmpty()) pages_.remove(path);
+  else pages_.insert(path, html);
+}
+
 bool Server::isListening() const { return tcp_ && tcp_->isListening(); }
 QString Server::url() const { return QStringLiteral("http://localhost:%1").arg(port_); }
 
@@ -857,6 +862,10 @@ void Server::route(const std::shared_ptr<Req>& req, const Resp& res) {
           {"message", "The Charts tab's local API (same routes as Quant Terminal), served by Deepwater while it runs. There is no web page here: "
                       "use the Charts tab, or call /api/... (docs/charts/api.md)."},
       });
+      return;
+    }
+    if (const auto page = pages_.constFind(p); page != pages_.cend() && m == "GET") {
+      sendRaw(res, 200, *page, "text/html; charset=utf-8");
       return;
     }
     if (p.startsWith("/custom/")) {
