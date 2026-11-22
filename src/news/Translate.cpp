@@ -9,6 +9,13 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QSet>
+#include <QMetaObject>
+
+#ifdef Q_OS_IOS
+// translate/DWTranslateIOS.swift (a static library built into the app)
+extern "C" void dw_translate_start(void (*line)(const char*));
+extern "C" void dw_translate_request(const char* jsonLine);
+#endif
 
 namespace news {
 
@@ -55,6 +62,14 @@ void Translate::remember(const QString& en, const QString& fr) {
 
 QString Translate::stateText() const {
   switch (m_state) {
+#ifdef Q_OS_IOS
+    case State::Ready: return QCoreApplication::translate("news", "Translated on this device (Apple Translation)");
+    case State::Starting: return QCoreApplication::translate("news", "Starting the on-device translator…");
+    case State::MissingPack: return QCoreApplication::translate("news", "French language not downloaded: Settings › Apps › Translate › Downloaded Languages. Showing the original English.");
+    case State::Unsupported: return QCoreApplication::translate("news", "English → French translation needs iOS 26 or later on this device. Showing the original English.");
+    case State::NoHelper:
+    case State::Failed: return QCoreApplication::translate("news", "The on-device translator stopped. Showing the original English.");
+#else
     case State::Ready: return QCoreApplication::translate("news", "Translated on this Mac (Apple Translation)");
     case State::Starting: return QCoreApplication::translate("news", "Starting the on-device translator…");
     case State::MissingPack: return QCoreApplication::translate("news", "French language pack not installed: System Settings › General › Language & Region › "
@@ -62,6 +77,7 @@ QString Translate::stateText() const {
     case State::Unsupported: return QCoreApplication::translate("news", "English → French translation is not available on this Mac. Showing the original English.");
     case State::NoHelper: return QCoreApplication::translate("news", "Translation helper (dw-translate) missing from the app. Showing the original English.");
     case State::Failed: return QCoreApplication::translate("news", "The on-device translator stopped. Showing the original English.");
+#endif
   }
   return {};
 }
@@ -69,6 +85,16 @@ QString Translate::stateText() const {
 QString Translate::cached(const QString& text) const { return m_cache.value(text.trimmed()); }
 
 void Translate::start() {
+#ifdef Q_OS_IOS
+  if (m_inProcess) return;
+  m_inProcess = true;
+  // lines come from the translator's own threads: copied, then handled on the GUI thread
+  dw_translate_start([](const char* line) {
+    const QByteArray copy = QByteArray(line) + '\n';
+    QMetaObject::invokeMethod(&Translate::instance(), [copy] { Translate::instance().consume(copy); }, Qt::QueuedConnection);
+  });
+  return;
+#endif
   if (m_proc) return;
   const QString exe = QCoreApplication::applicationDirPath() + "/dw-translate";
   if (!QFileInfo::exists(exe)) { m_state = State::NoHelper; emit stateChanged(); finishWaiters(); return; }
@@ -109,17 +135,24 @@ void Translate::request(const QStringList& texts, QObject* ctx, std::function<vo
 }
 
 void Translate::pump() {
-  if (!m_proc || m_state != State::Ready) return;
+  if ((!m_proc && !m_inProcess) || m_state != State::Ready) return;
   while (m_inflight.size() < kInflight && !m_queue.isEmpty()) {
     const QString t = m_queue.takeFirst();
     const int id = m_nextId++;
     m_inflight.insert(id, t);
-    m_proc->write(QJsonDocument(QJsonObject{{"id", id}, {"text", t}}).toJson(QJsonDocument::Compact) + "\n");
+    const QByteArray line = QJsonDocument(QJsonObject{{"id", id}, {"text", t}}).toJson(QJsonDocument::Compact);
+#ifdef Q_OS_IOS
+    dw_translate_request(line.constData());
+#else
+    m_proc->write(line + "\n");
+#endif
   }
 }
 
-void Translate::onOutput() {
-  m_buf += m_proc->readAllStandardOutput();
+void Translate::onOutput() { consume(m_proc->readAllStandardOutput()); }
+
+void Translate::consume(const QByteArray& chunk) {
+  m_buf += chunk;
   bool any = false;
   for (int nl; (nl = m_buf.indexOf('\n')) >= 0;) {
     const QByteArray line = m_buf.left(nl); m_buf.remove(0, nl + 1);

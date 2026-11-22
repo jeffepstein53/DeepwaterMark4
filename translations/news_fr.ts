@@ -449,6 +449,18 @@
         <translation>Traduit sur ce Mac (Apple Translation)</translation>
     </message>
     <message>
+        <source>Translated on this device (Apple Translation)</source>
+        <translation>Traduit sur cet appareil (Apple Translation)</translation>
+    </message>
+    <message>
+        <source>French language not downloaded: Settings › Apps › Translate › Downloaded Languages. Showing the original English.</source>
+        <translation>Langue française non téléchargée : Réglages › Apps › Traduire › Langues téléchargées. Texte anglais d’origine affiché.</translation>
+    </message>
+    <message>
+        <source>English → French translation needs iOS 26 or later on this device. Showing the original English.</source>
+        <translation>La traduction anglais → français demande iOS 26 ou plus récent sur cet appareil. Texte anglais d’origine affiché.</translation>
+    </message>
+    <message>
         <location filename="../src/news/Translate.cpp" line="38"/>
         <source>Starting the on-device translator…</source>
         <translation>Démarrage du traducteur local…</translation>

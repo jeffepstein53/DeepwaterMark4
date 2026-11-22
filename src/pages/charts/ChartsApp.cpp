@@ -30,6 +30,7 @@
 #include "core/I18n.h"
 #include "ui/Theme.h"
 #include "app/Pages.h"
+#include "platform/IosNotify.h"
 #include <QAbstractButton>
 #include <QApplication>
 #include <QSystemTrayIcon>
@@ -1919,6 +1920,9 @@ void ChartsApp::systemNotify(const QString& text, const QString& title) {
     dw::Process::startDetached("/usr/bin/osascript",
                             {"-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)",
                              "-e", "end run", text, title});
+#elif defined(Q_OS_IOS)
+  // iOS (native parity, 2026-11-22): a local notification, shown as a banner even with Deepwater in front
+  if (qEnvironmentVariableIsEmpty("DW_PROFILE")) dw::ios::notify(title, text);
 #elif defined(Q_OS_WIN)
   // Windows (native parity, 2026-11-22): a notification from Deepwater's icon in the notification area (made with the
   // first alert, kept while the app runs: Windows 11 shows it as a toast and keeps it in the notification centre)

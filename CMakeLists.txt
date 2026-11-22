@@ -26,14 +26,14 @@ file(GLOB_RECURSE DW_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
 if(APPLE)
   file(GLOB_RECURSE DW_OBJC CONFIGURE_DEPENDS src/*.mm)
   if(IOS)
-    # iOS (2026-11-21): no NSView to host the squawk's web view (NativeTvStub.cpp instead)
+    # iOS: the squawk's web view has its UIKit host (NativeTvIos.mm), not the macOS one (NativeTv.mm: NSView)
     list(FILTER DW_OBJC EXCLUDE REGEX "NativeTv\\.mm$")
   endif()
   list(APPEND DW_SOURCES ${DW_OBJC})
   # PDFKit and Vision objects are allocated with alloc/init and never released by hand: without ARC each PDF text
   # extraction, print and OCR leaked its document / request. NativeTv.mm keeps its objects in void* members with
   # manual retain/release (correct as written) and stays without ARC; a new .mm file should be added here.
-  set_source_files_properties(src/banks/Pdf.mm src/macro/Ocr.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  set_source_files_properties(src/banks/Pdf.mm src/macro/Ocr.mm src/platform/IosNotify.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
 
 # JavaScript engine of the Charts tab's custom indicators (src/charts/core/CustomJs): QuickJS-ng vendored in
@@ -88,7 +88,8 @@ target_compile_options(Deepwater PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,
                                          $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4>)
 target_link_libraries(Deepwater PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg Qt6::Concurrent Qt6::Xml Qt6::Sql Qt6::OpenGL Qt6::OpenGLWidgets Qt6::WebSockets Qt6::HttpServer quickjs lzmadec miniz)
 if(IOS)
-  target_link_libraries(Deepwater PRIVATE "-framework Foundation" "-framework UIKit" "-framework Vision" "-framework PDFKit" "-framework CoreGraphics")
+  target_link_libraries(Deepwater PRIVATE "-framework Foundation" "-framework UIKit" "-framework Vision" "-framework PDFKit" "-framework CoreGraphics"
+                        "-framework WebKit" "-framework UserNotifications")   # the Squawk player, alert notifications
   # Qt 6.12.0's RHI compositor with the upstream fix for QTBUG-151881 (whole window copied on every repaint): Qt is
   # static on iOS, so this file's definitions replace the library's (third_party/qt-patches/SOURCES.md)
   # binaries that are published (the iOS release): source and Qt header paths in assert messages written without the
@@ -169,6 +170,28 @@ if(APPLE AND NOT IOS)
     add_custom_target(dw_translate ALL DEPENDS ${DW_TRANSLATE_BIN})
     add_dependencies(Deepwater dw_translate)
   endif()
+endif()
+# iOS (native parity, 2026-11-22): no helper process, so the same translator runs in the app — a static library built
+# from src/news/translate/DWTranslateIOS.swift with swiftc and linked into Deepwater; its objects name the Swift runtime
+# libraries they need (found in the SDK, the runtime itself is the system's) and the Translation framework.
+if(IOS)
+  set(DW_TR_IOS_SRC ${CMAKE_SOURCE_DIR}/src/news/translate/DWTranslateIOS.swift)
+  set(DW_TR_IOS_LIB ${CMAKE_BINARY_DIR}/libdwtranslate-ios.a)
+  set(DW_TR_IOS_MIN ${CMAKE_OSX_DEPLOYMENT_TARGET})
+  if(NOT DW_TR_IOS_MIN)
+    set(DW_TR_IOS_MIN 18.0)
+  endif()
+  execute_process(COMMAND xcrun --sdk iphoneos --show-sdk-path OUTPUT_VARIABLE DW_IOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND xcrun --sdk iphoneos --find swiftc OUTPUT_VARIABLE DW_IOS_SWIFTC OUTPUT_STRIP_TRAILING_WHITESPACE)
+  get_filename_component(DW_IOS_TOOLCHAIN_LIB "${DW_IOS_SWIFTC}/../../lib/swift/iphoneos" ABSOLUTE)
+  add_custom_command(OUTPUT ${DW_TR_IOS_LIB}
+    COMMAND ${DW_IOS_SWIFTC} -parse-as-library -O -emit-library -static -module-name DWTranslate
+            -target arm64-apple-ios${DW_TR_IOS_MIN} -sdk ${DW_IOS_SDK} ${DW_TR_IOS_SRC} -o ${DW_TR_IOS_LIB}
+    DEPENDS ${DW_TR_IOS_SRC} COMMENT "Building the in-app translator (DWTranslateIOS.swift)")
+  add_custom_target(dw_translate_ios DEPENDS ${DW_TR_IOS_LIB})
+  add_dependencies(Deepwater dw_translate_ios)
+  target_link_libraries(Deepwater PRIVATE ${DW_TR_IOS_LIB} "-L${DW_IOS_SDK}/usr/lib/swift" "-L${DW_IOS_TOOLCHAIN_LIB}"
+                        "-framework Translation")
 endif()
 
 # Local models (AI › Agents): llama.cpp vendored in third_party/llama.cpp (library parts only, MIT) and the helper

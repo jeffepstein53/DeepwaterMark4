@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 #include <TargetConditionals.h>
 #import <PDFKit/PDFKit.h>
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#endif
 #include <CoreGraphics/CoreGraphics.h>
 
 namespace banks::pdf {
@@ -86,8 +89,28 @@ QString text(const QString& file, int page) {
 
 bool print(const QString& file) {
 #if TARGET_OS_IPHONE
-  Q_UNUSED(file);
-  return false;   // iOS: no print panel from a widgets app yet
+  // iOS (native parity, 2026-11-22): the system print sheet for the file (AirPrint, or Save to Files as PDF). On an iPad it
+  // must point at something: the middle of the key window's view.
+  @autoreleasepool {
+    NSURL* url = [NSURL fileURLWithPath:file.toNSString()];
+    if (![UIPrintInteractionController canPrintURL:url]) return false;
+    UIPrintInteractionController* pc = [UIPrintInteractionController sharedPrintController];
+    UIPrintInfo* info = [UIPrintInfo printInfo];
+    info.outputType = UIPrintInfoOutputGeneral;
+    info.jobName = url.lastPathComponent;
+    pc.printInfo = info;
+    pc.printingItem = url;
+    UIView* view = nil;
+    for (UIScene* scene in UIApplication.sharedApplication.connectedScenes)
+      if ([scene isKindOfClass:[UIWindowScene class]])
+        for (UIWindow* w in ((UIWindowScene*)scene).windows)
+          if (w.isKeyWindow) view = w.rootViewController.view ?: w;
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad && view) {
+      const CGRect b = view.bounds;
+      return [pc presentFromRect:CGRectMake(CGRectGetMidX(b), CGRectGetMidY(b), 1, 1) inView:view animated:YES completionHandler:nil];
+    }
+    return [pc presentAnimated:YES completionHandler:nil];
+  }
 #else
   @autoreleasepool {
     PDFDocument* doc = [[PDFDocument alloc] initWithURL:[NSURL fileURLWithPath:file.toNSString()]];

@@ -16,7 +16,8 @@
 //   tr.request(titles, this, [this] { update(); });     // translates what is missing, then calls back once
 //
 // Uses Apple's Translation framework through a small Swift helper process (dw-translate, next to the app's
-// executable): the GUI thread never waits. Results are cached on disk (paths::cache("news")). When the French
+// executable) on macOS; on iOS, where an app cannot start one, the same protocol runs in process
+// (translate/DWTranslateIOS.swift, built into the app). The GUI thread never waits. Results are cached on disk (paths::cache("news")). When the French
 // language pack is not downloaded, state() is MissingPack and nothing is translated: pages show the English text
 // and say so. The app UI itself stays in English; only news text is translated.
 namespace news {
@@ -47,12 +48,14 @@ private:
   void start();
   void pump();
   void onOutput();
+  void consume(const QByteArray& chunk);       // protocol lines (the helper's output, or the in-process translator's)
   void finishWaiters();
   void scheduleSave();
 
   struct Waiter { QPointer<QObject> ctx; bool hasCtx; QStringList texts; std::function<void()> done; };
   State m_state = State::Starting;
   dw::Process* m_proc = nullptr;
+  bool m_inProcess = false;                    // iOS: the translator built into the app was started
   QByteArray m_buf;
   void remember(const QString& en, const QString& fr);
   QHash<QString, QString> m_cache;             // en → fr

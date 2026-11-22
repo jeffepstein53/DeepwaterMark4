@@ -1,8 +1,8 @@
-// NativeTv on platforms without a system web view host yet (see NativeTv.h): no player, the pane links out.
+// NativeTv on platforms without a system web view host (see NativeTv.h; Linux, not shipped): no player, the pane links out.
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #endif
-#if (!defined(__APPLE__) && !defined(_WIN32)) || TARGET_OS_IPHONE   // iOS: no NSView host (NativeTv.mm is macOS only); Windows: NativeTvWin.cpp
+#if !defined(__APPLE__) && !defined(_WIN32)   // macOS: NativeTv.mm; iOS: NativeTvIos.mm; Windows: NativeTvWin.cpp
 #include "pages/news/squawk/NativeTv.h"
 namespace wire::squawk {
 NativeTv::NativeTv(QWidget* parent) : QObject(reinterpret_cast<QObject*>(parent)) {}
