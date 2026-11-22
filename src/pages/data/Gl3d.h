@@ -1,6 +1,7 @@
 #pragma once
 #include <QOpenGLExtraFunctions>
 #include <QOpenGLShaderProgram>
+#include <QSurfaceFormat>
 #include <QMatrix4x4>
 #include <QVector3D>
 #include <QVector4D>
@@ -16,6 +17,9 @@
 // OpenGL 3.3 core (Metal underneath on macOS), simple directional light, an opaque and a see-through pass, an
 // optional "slice" that keeps one plane of cells bright and fades the others, and an orbit camera with picking rays.
 namespace macrodata3d {
+
+// The 3D views' context: OpenGL ES 3.0 on iOS, 3.3 core elsewhere (depth 24, 4 samples).
+QSurfaceFormat surfaceFormat();
 
 struct Instance {
   float px, py, pz;      // centre of the base (x, z) and base height (y)

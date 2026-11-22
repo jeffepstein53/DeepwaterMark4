@@ -523,7 +523,9 @@ QHash<QString, QString> parseQuery(const QByteArray& raw) {
 }
 
 QString platformName() {
-#if defined(Q_OS_MACOS)
+#if defined(Q_OS_IOS)   // before Q_OS_MACOS's neighbours: an iPhone answered "linux"
+  return QStringLiteral("ios");
+#elif defined(Q_OS_MACOS)
   return QStringLiteral("darwin");
 #elif defined(Q_OS_WIN)
   return QStringLiteral("win32");

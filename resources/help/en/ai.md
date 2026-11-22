@@ -104,7 +104,7 @@ This sub-tab trains your own models on market and macro data, from start to fini
 
 ### Python environment
 
-Training needs Python 3.11 or later on this computer, from python.org or Homebrew. The header says whether Python was found and what state the environment is in. **INSTALL**, after asking, creates Deepwater's own Python environment in its data folder and downloads scikit-learn, pandas, NumPy, SciPy, LightGBM and XGBoost, as ready-built packages only (about 300 MB); **CANCEL** stops it while it installs.
+Training runs on the Mac: each training runs inside a macOS sandbox that cuts it off from the network and from your files, and Windows has no such sandbox in Deepwater yet; an iPhone or iPad cannot start Python at all. On these, the header says so and nothing is installed. On the Mac, training needs Python 3.11 or later, from python.org or Homebrew. The header says whether Python was found and what state the environment is in. **INSTALL**, after asking, creates Deepwater's own Python environment in its data folder and downloads scikit-learn, pandas, NumPy, SciPy, LightGBM and XGBoost, as ready-built packages only (about 300 MB); **CANCEL** stops it while it installs.
 
 **INSTALL PYTORCH** appears when a family needs it and adds PyTorch, processor only (about 700 MB). An algorithm that cannot run here is listed **unavailable** or **needs PyTorch**, with the reason in its tooltip.
 

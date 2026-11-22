@@ -2470,6 +2470,18 @@ Continuer ?</translation>
         <translation>pas de Python 3.11+ sur cet ordinateur : installez-le depuis python.org</translation>
     </message>
     <message>
+        <source>trainings run on the Mac: iOS does not let Deepwater start Python</source>
+        <translation>les entraînements se font sur Mac : iOS ne permet pas à Deepwater de lancer Python</translation>
+    </message>
+    <message>
+        <source>trainings run on the Mac for now: their sandbox exists only on macOS</source>
+        <translation>les entraînements se font sur Mac pour l'instant : leur bac à sable n'existe que sous macOS</translation>
+    </message>
+    <message>
+        <source>Local models run on the Mac and on Windows: iOS does not let Deepwater start the program that runs them, so they are not downloaded on this device.</source>
+        <translation>Les modèles locaux tournent sur Mac et sous Windows : iOS ne permet pas à Deepwater de lancer le programme qui les fait tourner, ils ne sont donc pas téléchargés sur cet appareil.</translation>
+    </message>
+    <message>
         <location filename="../src/pages/ai/MlPage.cpp" line="971"/>
         <source>Python %1 found · environment not installed</source>
         <translation>Python %1 trouvé · environnement non installé</translation>

@@ -47,7 +47,8 @@ public:
   void start();                   // main(): the launch check, then the WebSocket
   void check();                   // ask GitHub now (the dialog's button; ignored while one is running)
   void install();                 // download + install + start again (macOS, Windows); opens the page (iOS)
-  static bool canInstallItself(); // macOS and Windows
+  static bool canInstallItself(); // macOS, and Windows when run from its install folder (not from the .zip)
+  static bool runsFromInstall();  // Windows: this copy is the installed one (Program Files/Deepwater); true elsewhere
   static QString platformSuffix();// the asset name's end for this platform ("-macos.dmg", …)
 
   State state() const { return m_state; }

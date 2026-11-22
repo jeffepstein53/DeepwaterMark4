@@ -32,7 +32,7 @@ A few shortcuts work everywhere in the application; the pages that have their ow
 
 | Keys | What it does |
 |---|---|
-| ⌘1 … ⌘9, ⌘0 | Opens main tab 1 to 10, on its first sub-tab |
+| ⌘1 … ⌘9 | Opens main tab 1 to 9, on its first sub-tab (⌘0 is the zoom's actual size; on an iPad it opens the tenth tab) |
 | ⌘] and ⌘[ | Next and previous sub-tab of the current tab |
 | ⌘, | Options |
 | F1 or ⌘? | This documentation, open at the chapter of the current tab |

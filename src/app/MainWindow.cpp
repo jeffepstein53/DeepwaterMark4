@@ -90,8 +90,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   addAction(help);
   if (QGuiApplication::platformName() == "cocoa") menuBar()->addMenu(QCoreApplication::translate("help", "Help"))->addAction(help);
 
-  // Cmd+1..9 then Cmd+0: main tabs (Key_1 + 9 would be ':'); Cmd+[ / Cmd+]: previous / next sub-tab
-  for (int i = 0; i < app::tabs().size() && i < 10; ++i) {
+  // Cmd+1..9: main tabs (Key_1 + 9 would be ':'); Cmd+[ / Cmd+]: previous / next sub-tab. Cmd+0 is the zoom's "Actual
+  // size" wherever there is a zoom: given to the 10th tab too, Qt found the key ambiguous and neither ran. iOS has no
+  // zoom: Cmd+0 opens the 10th tab there (a keyboard on an iPad).
+#ifdef Q_OS_IOS
+  constexpr int kTabKeys = 10;
+#else
+  constexpr int kTabKeys = 9;
+#endif
+  for (int i = 0; i < app::tabs().size() && i < kTabKeys; ++i) {
     auto* sc = new QShortcut(QKeySequence(Qt::CTRL | (i < 9 ? Qt::Key(Qt::Key_1 + i) : Qt::Key_0)), this);
     connect(sc, &QShortcut::activated, this, [this, i] { open(i, 0); });
   }

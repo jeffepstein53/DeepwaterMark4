@@ -759,6 +759,10 @@
         <translation>CE FICHIER N'EST PAS UN PDF LISIBLE</translation>
     </message>
     <message>
+        <source>PDF PAGES ARE SHOWN ON MACOS AND IOS FOR NOW · SAVE THE FILE TO READ IT</source>
+        <translation>LES PAGES PDF NE S'AFFICHENT POUR L'INSTANT QUE SUR MACOS ET IOS · ENREGISTREZ LE FICHIER POUR LE LIRE</translation>
+    </message>
+    <message>
         <location filename="../src/pages/news/bank-research/PdfPanel.cpp" line="188" />
         <source>LOADING</source>
         <translation>CHARGEMENT</translation>

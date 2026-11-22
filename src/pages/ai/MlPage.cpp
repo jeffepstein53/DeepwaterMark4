@@ -1304,6 +1304,7 @@ private:
     auto& env = ml::Environment::instance();
     const auto& s = env.status();
     QString t; QColor col = c.textDim;
+#ifdef Q_OS_MACOS
     if (env.installing()) { t = QCoreApplication::translate("ai", "installing (%1/%2)…").arg(env.installStep() + 1).arg(ml::Environment::installSteps()); col = c.warn; }
     else if (!s.probed) t = QCoreApplication::translate("ai", "checking Python…");
     else if (s.ready()) {
@@ -1311,15 +1312,30 @@ private:
       if (s.packages.contains("torch")) parts << "PyTorch " + s.packages.value("torch");
       for (const char* k : {"lightgbm", "xgboost"}) if (s.packages.contains(k)) parts << QString(k == QString("lightgbm") ? "LightGBM " : "XGBoost ") + s.packages.value(k);
       t = parts.join("  ·  "); col = c.up;
-    } else if (s.basePython.isEmpty()) { t = QCoreApplication::translate("ai", "no Python 3.11+ on this computer: install it from python.org"); col = c.down; }
+    }
+    else if (s.basePython.isEmpty()) { t = QCoreApplication::translate("ai", "no Python 3.11+ on this computer: install it from python.org"); col = c.down; }
     else { t = QCoreApplication::translate("ai", "Python %1 found · environment not installed").arg(s.baseVersion); col = c.warn; }
+#else
+    // Trainings run in macOS's sandbox only (ml/Runs.cpp) and iOS cannot start Python at all: "install it from
+    // python.org" sent people to install something this page would then refuse to use.
+#ifdef Q_OS_IOS
+    t = QCoreApplication::translate("ai", "trainings run on the Mac: iOS does not let Deepwater start Python");
+#else
+    t = QCoreApplication::translate("ai", "trainings run on the Mac for now: their sandbox exists only on macOS");
+#endif
+    col = c.warn;
+#endif
     m_env->setText(t);
     m_env->setStyleSheet(QString("color:%1;background:transparent;").arg(col.name()));
     QStringList tip;
     for (auto it = s.unavailable.begin(); it != s.unavailable.end(); ++it) tip << it.key() + ": " + it.value();
     m_env->setToolTip(tip.join("\n"));
     const bool needTorch = s.ready() && !env.hasTorch() && (family() == 3 || (family() == 4 && m_algo && currentAlgo().needs == "torch"));
+#ifdef Q_OS_MACOS
     m_install->setVisible(env.installing() || (s.probed && !s.ready() && !s.basePython.isEmpty()) || needTorch);
+#else
+    m_install->setVisible(false);   // nothing installed here could be used (see above)
+#endif
     m_install->setText(env.installing() ? QCoreApplication::translate("ai", "CANCEL") : needTorch ? QCoreApplication::translate("ai", "INSTALL PYTORCH") : QCoreApplication::translate("ai", "INSTALL"));
     m_installLine->setVisible(env.installing() || !m_installLine->text().isEmpty());
     if (env.installing()) m_installLine->setStyleSheet(QString("color:%1;background:transparent;").arg(c.textMute.name()));

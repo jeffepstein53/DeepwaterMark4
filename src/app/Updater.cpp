@@ -61,9 +61,22 @@ QString Updater::platformSuffix() {
 #endif
 }
 
-bool Updater::canInstallItself() {
-#if defined(Q_OS_MACOS) || defined(Q_OS_WIN)
+bool Updater::runsFromInstall() {
+#ifdef Q_OS_WIN
+  const QString installed = QDir::cleanPath(qEnvironmentVariable("ProgramFiles") + "/Deepwater");
+  return QDir::cleanPath(QCoreApplication::applicationDirPath()).compare(installed, Qt::CaseInsensitive) == 0;
+#else
   return true;
+#endif
+}
+
+bool Updater::canInstallItself() {
+#if defined(Q_OS_MACOS)
+  return true;
+#elif defined(Q_OS_WIN)
+  // the installer always installs to Program Files: a copy run from the .zip (anywhere else) would stay as it is while
+  // a second one appeared there, so it is offered the release page instead
+  return runsFromInstall();
 #else
   return false;
 #endif

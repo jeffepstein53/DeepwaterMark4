@@ -567,7 +567,16 @@ void Engine::sendPending() {
 }
 
 void Engine::cancel() {
-  if (m_cc) { m_ccStopped = true; m_cc->terminate(); return; }   // Claude Code ends cleanly on SIGTERM
+  if (m_cc) {
+    m_ccStopped = true;
+#ifdef Q_OS_WIN
+    // QProcess::terminate() posts WM_CLOSE, which a console program (claude.exe / node) never reads: the answer went on
+    m_cc->kill();
+#else
+    m_cc->terminate();   // Claude Code ends cleanly on SIGTERM
+#endif
+    return;
+  }
   if (m_state == State::Busy) m_cancelTools = true;   // also ends a tool round between two calls
   // the request id: a stop read by the runner before it started this answer must not be lost (helpers/llm)
   if (m_state == State::Busy && m_proc) m_proc->write("{\"cmd\":\"stop\",\"id\":" + QByteArray::number(m_reqId) + "}\n");

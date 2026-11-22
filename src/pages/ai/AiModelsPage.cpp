@@ -395,6 +395,11 @@ private:
                                theme::sans(12), c.warn, this, true));
     m_detail->addWidget(text(QCoreApplication::translate("ai", "Read the licence before use: some models forbid commercial use or require attribution."),
                              theme::sans(11), c.textMute, this, true));
+#ifdef Q_OS_IOS
+    // iOS does not let an app start the model runner (helpers/llm): nothing could load what would be downloaded here
+    m_detail->addWidget(text(QCoreApplication::translate("ai", "Local models run on the Mac and on Windows: iOS does not let Deepwater start the program that runs them, so they are not downloaded on this device."),
+                             theme::sans(12), c.warn, this, true));
+#endif
 
     int shown = 0;
     for (const auto& f : d.files) {
@@ -420,6 +425,7 @@ private:
         ok->setStyleSheet(ok->styleSheet() + "border:0;");
         h->addWidget(ok);
       } else {
+#ifndef Q_OS_IOS
         auto* dl = button(QCoreApplication::translate("ai", "DOWNLOAD"), true, row);
         const ai::HubFile file = f; const QString lic = d.model.license;
         connect(dl, &QPushButton::clicked, this, [this, repo, file, lic] {
@@ -432,13 +438,16 @@ private:
           hub.download(repo, file, lic);
         });
         h->addWidget(dl);
+#endif
       }
       m_detail->addWidget(row);
       ++shown;
+#ifndef Q_OS_IOS
       if (!m_hookUsed && qEnvironmentVariable("DW_AI_DOWNLOAD") == f.path && !hub.isInstalled(d.model.id, f.path)) {
         m_hookUsed = true;
         hub.download(d.model.id, f, d.model.license);
       }
+#endif
     }
     if (!shown) m_detail->addWidget(text(QCoreApplication::translate("ai", "No GGUF file in this repository: switch to ALL FORMATS to see every file."),
                                          theme::sans(12), c.textMute, this, true));

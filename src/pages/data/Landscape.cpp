@@ -12,10 +12,7 @@
 namespace macrodatapage {
 
 Landscape::Landscape(QWidget* parent) : QOpenGLWidget(parent) {
-  QSurfaceFormat f;
-  f.setVersion(3, 3); f.setProfile(QSurfaceFormat::CoreProfile);
-  f.setDepthBufferSize(24); f.setSamples(4);
-  setFormat(f);
+  setFormat(macrodata3d::surfaceFormat());
   setMouseTracking(true);
   setMinimumHeight(240);
   m_overlay = new macrodata3d::Overlay(this);

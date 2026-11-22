@@ -32,7 +32,7 @@ Quelques raccourcis fonctionnent partout dans l'application ; les pages qui ont 
 
 | Touches | Effet |
 |---|---|
-| ⌘1 … ⌘9, ⌘0 | Ouvre l'onglet principal 1 à 10, sur son premier sous-onglet |
+| ⌘1 … ⌘9 | Ouvre l'onglet principal 1 à 9, sur son premier sous-onglet (⌘0 remet le zoom à sa taille réelle ; sur iPad, il ouvre le dixième onglet) |
 | ⌘] et ⌘[ | Sous-onglet suivant et précédent de l'onglet courant |
 | ⌘, | Options |
 | F1 ou ⌘? | Cette documentation, ouverte au chapitre de l'onglet courant |

@@ -11,6 +11,10 @@
 #include <QFile>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
+#elif defined(Q_OS_WIN)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #endif
 
 namespace ai {
@@ -124,6 +128,11 @@ qint64 Slots::memoryTotal() const {
 #ifdef __APPLE__
   qint64 mem = 0; size_t len = sizeof(mem);
   if (sysctlbyname("hw.memsize", &mem, &len, nullptr, 0) == 0) return mem;
+#elif defined(Q_OS_WIN)
+  // the Agents page's RAM gauge stayed hidden on Windows (0 = unknown)
+  MEMORYSTATUSEX ms{};
+  ms.dwLength = sizeof(ms);
+  if (GlobalMemoryStatusEx(&ms)) return qint64(ms.ullTotalPhys);
 #endif
   return 0;
 }

@@ -104,7 +104,7 @@ Ce sous-onglet entraîne vos propres modèles sur des données de marché et mac
 
 ### Environnement Python
 
-L'entraînement demande Python 3.11 ou plus récent sur cet ordinateur, depuis python.org ou Homebrew. L'en-tête indique si Python a été trouvé et dans quel état se trouve l'environnement. **INSTALLER**, après confirmation, crée l'environnement Python propre à Deepwater dans son dossier de données et télécharge scikit-learn, pandas, NumPy, SciPy, LightGBM et XGBoost, en paquets précompilés uniquement (environ 300 Mo) ; **ANNULER** l'interrompt pendant l'installation.
+L'entraînement se fait sur Mac : chaque entraînement tourne dans un bac à sable de macOS qui le coupe du réseau et de vos fichiers, et Deepwater n'a pas encore d'équivalent sous Windows ; un iPhone ou un iPad ne peut pas lancer Python du tout. Sur ces appareils, l'en-tête le dit et rien n'est installé. Sur Mac, l'entraînement demande Python 3.11 ou plus récent, depuis python.org ou Homebrew. L'en-tête indique si Python a été trouvé et dans quel état se trouve l'environnement. **INSTALLER**, après confirmation, crée l'environnement Python propre à Deepwater dans son dossier de données et télécharge scikit-learn, pandas, NumPy, SciPy, LightGBM et XGBoost, en paquets précompilés uniquement (environ 300 Mo) ; **ANNULER** l'interrompt pendant l'installation.
 
 **INSTALLER PYTORCH** apparaît quand une famille en a besoin et ajoute PyTorch, sur le processeur seulement (environ 700 Mo). Un algorithme qui ne peut pas tourner ici est marqué **indisponible** ou **demande PyTorch**, avec la raison dans son infobulle.
 

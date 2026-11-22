@@ -1,10 +1,11 @@
 #include "pages/data/Gl3d.h"
+#include <QOpenGLContext>
 #include <QtMath>
 #include <cmath>
 
 namespace macrodata3d {
 namespace {
-const char* kVert = R"(#version 330 core
+const char* kVert = R"(
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec3 iPos;
@@ -35,7 +36,7 @@ void main() {
   vColor = c;
 }
 )";
-const char* kFrag = R"(#version 330 core
+const char* kFrag = R"(
 in vec4 vColor;
 uniform int uPass;     // 0 opaque, 1 see-through
 out vec4 frag;
@@ -65,11 +66,32 @@ QVector<float> boxMesh() {
 
 BoxRenderer::~BoxRenderer() = default;
 
+// The GLSL version line for the current context: OpenGL ES 3.0 on iOS (iPhone and iPad have no desktop OpenGL; the
+// "#version 330 core" shaders were refused there and the 3D views stayed empty), 3.3 core elsewhere.
+static QByteArray glslHeader() {
+  const QOpenGLContext* c = QOpenGLContext::currentContext();
+  if (c && c->isOpenGLES()) return "#version 300 es\nprecision highp float;\nprecision highp int;\n";
+  return "#version 330 core\n";
+}
+
+QSurfaceFormat surfaceFormat() {
+  QSurfaceFormat f;
+#ifdef Q_OS_IOS
+  f.setRenderableType(QSurfaceFormat::OpenGLES);
+  f.setVersion(3, 0);
+#else
+  f.setVersion(3, 3); f.setProfile(QSurfaceFormat::CoreProfile);
+#endif
+  f.setDepthBufferSize(24); f.setSamples(4);
+  return f;
+}
+
 bool BoxRenderer::init() {
   initializeOpenGLFunctions();
   m_prog = std::make_unique<QOpenGLShaderProgram>();
-  if (!m_prog->addShaderFromSourceCode(QOpenGLShader::Vertex, kVert) ||
-      !m_prog->addShaderFromSourceCode(QOpenGLShader::Fragment, kFrag) || !m_prog->link()) {
+  const QByteArray head = glslHeader();
+  if (!m_prog->addShaderFromSourceCode(QOpenGLShader::Vertex, head + kVert) ||
+      !m_prog->addShaderFromSourceCode(QOpenGLShader::Fragment, head + kFrag) || !m_prog->link()) {
     qWarning("[facts3d] shaders: %s", qPrintable(m_prog->log()));
     return false;
   }

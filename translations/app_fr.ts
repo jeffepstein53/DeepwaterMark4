@@ -612,6 +612,10 @@
         <translation>iOS ne permet pas à une app de s'installer elle-même : installez la nouvelle version depuis sa page de publication (Sideloadly, AltStore ou TestFlight).</translation>
     </message>
     <message>
+        <source>This copy runs from the .zip, outside the installed Deepwater: download the new .zip from the release page, or use the installer once.</source>
+        <translation>Cette copie tourne depuis le .zip, hors du Deepwater installé : téléchargez le nouveau .zip depuis la page de publication, ou utilisez une fois l'installateur.</translation>
+    </message>
+    <message>
         <source>Looking for a new version…</source>
         <translation>Recherche d'une nouvelle version…</translation>
     </message>
