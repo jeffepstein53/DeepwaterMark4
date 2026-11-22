@@ -1000,6 +1000,18 @@
         <translation>Comparer des symboles</translation>
     </message>
     <message>
+        <source>Side panel</source>
+        <translation>Panneau latéral</translation>
+    </message>
+    <message>
+        <source>More</source>
+        <translation>Plus</translation>
+    </message>
+    <message>
+        <source>Drawing tools</source>
+        <translation>Outils de dessin</translation>
+    </message>
+    <message>
         <location filename="../src/pages/charts/ChartsApp.cpp" line="443"/>
         <location filename="../src/pages/charts/ChartsApp.cpp" line="1802"/>
         <source>Compare with…</source>

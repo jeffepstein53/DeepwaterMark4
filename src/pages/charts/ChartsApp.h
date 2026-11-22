@@ -58,6 +58,8 @@ public:
   void syncToolbar();
   void setTf(const QString& tf);
   void setSymbol(const QString& sym, ChartPane* pane = nullptr);   // nullptr = active
+  // Narrow windows (≤ 900 px) show the side panel as a sheet over the chart: opens / closes it (no-op when it is docked).
+  void showSidePanel(bool on = true);
   void setTool(const QString& tool);
 
   // ---- modals (JS modal(title, bodyHtml, {foot, wide})): an overlay card inside the page ----

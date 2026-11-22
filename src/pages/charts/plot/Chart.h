@@ -122,6 +122,7 @@ protected:
   void mouseReleaseEvent(QMouseEvent*) override;
   void mouseDoubleClickEvent(QMouseEvent*) override;
   void wheelEvent(QWheelEvent*) override;
+  bool event(QEvent*) override;   // a trackpad pinch zooms the time scale (QNativeGestureEvent)
   void leaveEvent(QEvent*) override;
 
 private:

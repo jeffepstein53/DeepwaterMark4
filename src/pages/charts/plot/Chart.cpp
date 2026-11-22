@@ -1,3 +1,4 @@
+#include <QNativeGestureEvent>
 #include "pages/charts/plot/Chart.h"
 #include "pages/charts/plot/Format.h"
 #include "ui/Theme.h"
@@ -888,6 +889,22 @@ void Chart::wheelEvent(QWheelEvent* e) {
   } else {
     e->ignore();
   }
+}
+
+// A trackpad pinch (macOS: ZoomNativeGesture, value = the magnification since the last event) zooms the time scale around
+// the fingers like the wheel does: TimeScale::zoom multiplies the bar spacing by 1 + scale / 10, so a factor f is
+// scale = 10 (f - 1). Native parity 2026-11-22 (the Charts phone pass); a finger pinch on iOS is not handled yet.
+bool Chart::event(QEvent* e) {
+  if (e->type() == QEvent::NativeGesture && o_.handleScale.mouseWheel) {
+    auto* g = static_cast<QNativeGestureEvent*>(e);
+    if (g->gestureType() == Qt::ZoomNativeGesture) {
+      ensureLayout();
+      ts_.zoom(g->position().x(), 10.0 * g->value());
+      e->accept();
+      return true;
+    }
+  }
+  return QWidget::event(e);
 }
 
 void Chart::leaveEvent(QEvent*) {

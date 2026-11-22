@@ -24,6 +24,9 @@ QPixmap brand(int px, const QColor& accent, const QColor& stroke, qreal dpr = 2.
 
 // Inner markup of the icons the page shell uses (index.html, app.js). Others pass their own strings.
 inline constexpr const char* kIndicators = R"(<path d="M3 17l5-6 4 3 6-8 3 3" />)";
+// phone layout (native parity, 2026-11-22): the topbar's "more" menu and the side panel's toggle
+inline constexpr const char* kMore = R"(<circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" />)";
+inline constexpr const char* kSide = R"(<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" />)";
 inline constexpr const char* kCompare = R"(<circle cx="12" cy="12" r="8" /><path d="M12 6v12M6 12h12" />)";
 inline constexpr const char* kReplay = R"(<path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4" />)";
 inline constexpr const char* kAlert = R"(<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 20h4" />)";

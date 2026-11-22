@@ -72,6 +72,9 @@
 #include <QJsonDocument>
 #include <QTextDocument>
 #include <QResizeEvent>
+#include <QMenu>
+#include <QInputDialog>
+#include "ui/Touch.h"
 #include <cmath>
 
 DW_PAGE("charts/charts", charts::ui::ChartsApp)
@@ -288,6 +291,29 @@ struct ChartsApp::Impl {
   // toasts
   QList<QPointer<QLabel>> toasts;   // .toasts: bottom-right column, 8 px gaps, oldest on top
 
+  // ---- phone and narrow windows (native parity, 2026-11-22; the Qt app had no Charts phone layout). Same choices as
+  // Deepwater Cross: below ui::compact (760 px) one chart only (the active one), the topbar keeps the symbol, the
+  // timeframe as a list, the chart type, indicators and replay, the rest goes into ⋯; the drawbar opens from ⋯. Up to
+  // 900 px the side panel (hidden there before, with no way to reach it) is a sheet over the chart: 300 px on the
+  // right, the full width on a phone, closed by ×, a tap beside it, or (phone) picking a symbol in it.
+  bool phone = false, narrow = false, sheetOpen = false, drawOpen = false;
+  int cols = 1, rows = 1;                 // the layout's grid (setLayout)
+  QList<QWidget*> desktopOnly;            // topbar items folded into ⋯ on a phone
+  QComboBox* tfPhone = nullptr;           // phone: the timeframe as a list
+  QPushButton* moreBtn = nullptr;         // phone: ⋯
+  QPushButton* sideBtn = nullptr;         // narrow window: the side panel's sheet
+  QPushButton* indBtn = nullptr;
+  QWidget* drawScroll = nullptr;
+  QHBoxLayout* mainRow = nullptr;
+  QWidget* topScroll = nullptr;
+  QWidget* sheetBack = nullptr;           // dims the chart behind the sheet; a tap closes it
+  QPushButton* sheetClose = nullptr;
+  std::function<void()> moreMenu;
+  void placePanes();
+  void applyResponsive();
+  void placeSheet();
+  void openSheet(bool on);
+
   void placeOverlays();
   void restyle();
 };
@@ -376,6 +402,7 @@ ChartsApp::ChartsApp(QWidget* parent) : QWidget(parent), d(new Impl(this)) {
   tb->setContentsMargins(8, 0, 8, 1);
   tb->setSpacing(2);
   root->addWidget(topScroll);
+  d->topScroll = topScroll;
 
   tb->addWidget(new Brand(topbar));
   d->symbolBtn = style::tbButton("BTCUSDT", {}, QCoreApplication::translate("charts", "Change symbol (or just start typing)"), topbar);
@@ -443,6 +470,7 @@ ChartsApp::ChartsApp(QWidget* parent) : QWidget(parent), d(new Impl(this)) {
   auto* indBtn = style::tbButton(QCoreApplication::translate("charts", "Indicators"), icons::kIndicators, QCoreApplication::translate("charts", "Indicators"), topbar);
   connect(indBtn, &QPushButton::clicked, this, [this] { openIndicatorPicker(); });
   tb->addWidget(indBtn);
+  d->indBtn = indBtn;
   auto* cmpBtn = style::tbButton(QCoreApplication::translate("charts", "Compare"), icons::kCompare, QCoreApplication::translate("charts", "Compare symbols"), topbar);
   connect(cmpBtn, &QPushButton::clicked, this, [this] {
     openSymbolSearch(
@@ -553,6 +581,56 @@ ChartsApp::ChartsApp(QWidget* parent) : QWidget(parent), d(new Impl(this)) {
   };
   auto* topWheel = new TopbarWheel(topScroll);
   for (auto* c : topbar->findChildren<QComboBox*>()) c->installEventFilter(topWheel);
+  // ---- phone / narrow (see Impl): what folds into ⋯, the phone's own items
+  {
+    const QSet<QWidget*> keep{d->symbolBtn, d->chartType, d->fpGear, indBtn, d->replayBtn, d->status};
+    for (int i = 0; i < tb->count(); ++i)
+      if (QWidget* w = tb->itemAt(i)->widget(); w && !keep.contains(w)) d->desktopOnly << w;
+    d->tfPhone = style::tbSelect(QCoreApplication::translate("charts", "Any timeframe: 1s, 7m, 2h, 3D, 2W, 3M"), topbar);
+    for (const QString& t : TF_QUICK) d->tfPhone->addItem(t, t);
+    connect(d->tfPhone, &QComboBox::activated, this, [this](int i) { setTf(d->tfPhone->itemData(i).toString()); });
+    d->tfPhone->setFixedWidth(QFontMetrics(style::font(13)).horizontalAdvance("15m") + 9 + 22 + 24);
+    d->tfPhone->hide();
+    tb->insertWidget(tb->indexOf(d->symbolBtn) + 1, d->tfPhone);
+    d->sideBtn = style::tbButton({}, icons::kSide, QCoreApplication::translate("charts", "Side panel"), topbar);
+    connect(d->sideBtn, &QPushButton::clicked, this, [this] { d->openSheet(!d->sheetOpen); });
+    d->sideBtn->hide();
+    // right after the symbol: a narrow window's bar scrolls sideways, its end out of sight
+    tb->insertWidget(tb->indexOf(d->symbolBtn) + 1, d->sideBtn);
+    d->moreBtn = style::tbButton({}, icons::kMore, QCoreApplication::translate("charts", "More"), topbar);
+    d->moreBtn->hide();
+    tb->insertWidget(tb->indexOf(d->status) - 1, d->moreBtn);
+    // ⋯: what a phone's topbar has no room for (Deepwater Cross's menu, same order)
+    d->moreMenu = [this, cmpBtn, alertBtn, snapBtn, csvBtn, setBtn, themeBtn] {
+      QMenu m(this);
+      m.addAction(QCoreApplication::translate("charts", "Any timeframe: 1s, 7m, 2h, 3D, 2W, 3M"), this, [this] {
+        bool ok = false;
+        const QString v = QInputDialog::getText(this, QCoreApplication::translate("charts", "Timeframe"),
+                                                QCoreApplication::translate("charts", "Any timeframe: 1s, 7m, 2h, 3D, 2W, 3M"), QLineEdit::Normal, {}, &ok);
+        if (!ok || v.trimmed().isEmpty()) return;
+        d->tfCustom->setText(v.trimmed());
+        emit d->tfCustom->returnPressed();   // the bar's own parsing and errors
+      });
+      m.addAction(QCoreApplication::translate("charts", "Compare symbols"), cmpBtn, &QPushButton::click);
+      QAction* draw = m.addAction(QCoreApplication::translate("charts", "Drawing tools"), this, [this] {
+        d->drawOpen = !d->drawOpen;
+        d->applyResponsive();
+      });
+      draw->setCheckable(true);
+      draw->setChecked(d->drawOpen);
+      m.addAction(QCoreApplication::translate("charts", "Create alert"), alertBtn, &QPushButton::click);
+      m.addAction(QCoreApplication::translate("charts", "Side panel"), this, [this] { d->openSheet(true); });
+      QAction* log = m.addAction(QCoreApplication::translate("charts", "Logarithmic price scale"), d->logBtn, &QPushButton::click);
+      log->setCheckable(true);
+      log->setChecked(active && active->cfg.value("log").toBool());
+      m.addAction(QCoreApplication::translate("charts", "Download chart image"), snapBtn, &QPushButton::click);
+      m.addAction(QCoreApplication::translate("charts", "Export chart data (CSV)"), csvBtn, &QPushButton::click);
+      m.addAction(QCoreApplication::translate("charts", "Settings"), setBtn, &QPushButton::click);
+      m.addAction(QCoreApplication::translate("charts", "Light / dark"), themeBtn, &QPushButton::click);
+      m.exec(d->moreBtn->mapToGlobal(QPoint(d->moreBtn->width() - m.sizeHint().width(), d->moreBtn->height())));
+    };
+    connect(d->moreBtn, &QPushButton::clicked, this, [this] { d->moreMenu(); });
+  }
   // the browser's flex items never shrink below their content (.tf-group is flex: none): the bar overflows instead.
   // Qt would squeeze them (the timeframe buttons down to their 34 px minimum, cutting "15m"), so each item keeps
   // its natural width and the scroll area takes the overflow.
@@ -611,6 +689,7 @@ ChartsApp::ChartsApp(QWidget* parent) : QWidget(parent), d(new Impl(this)) {
 
   // main
   auto* mainRow = new QHBoxLayout;
+  d->mainRow = mainRow;
   mainRow->setContentsMargins(0, 0, 0, 0);
   mainRow->setSpacing(0);
   root->addLayout(mainRow, 1);
@@ -672,6 +751,7 @@ ChartsApp::ChartsApp(QWidget* parent) : QWidget(parent), d(new Impl(this)) {
   drawScroll->setStyleSheet("QScrollArea { background: transparent; }");
   drawScroll->setWidget(drawbar);
   mainRow->addWidget(drawScroll);
+  d->drawScroll = drawScroll;
 
   // center: grid + bottom
   d->center = new Box(this, Box::None);
@@ -698,6 +778,23 @@ ChartsApp::ChartsApp(QWidget* parent) : QWidget(parent), d(new Impl(this)) {
   sl->setContentsMargins(0, 0, 0, 0);
   sl->setSpacing(0);
   mainRow->addWidget(d->sideBox);
+  // the sheet's backdrop and close button (narrow windows, see Impl)
+  {
+    struct SheetBack : QWidget {
+      std::function<void()> onTap;
+      explicit SheetBack(QWidget* p) : QWidget(p) {}
+      void paintEvent(QPaintEvent*) override { QPainter(this).fillRect(rect(), style::v().backdrop); }   // the modals' dim
+      void mousePressEvent(QMouseEvent* e) override { e->accept(); if (onTap) onTap(); }
+    };
+    auto* back = new SheetBack(this);
+    back->onTap = [this] { d->openSheet(false); };
+    back->hide();
+    d->sheetBack = back;
+    // a child of the page, not of the sheet: on a narrow window it sits in the dimmed margin, clear of the side tabs
+    d->sheetClose = style::tbButton({}, icons::kClose, QCoreApplication::translate("charts", "Close"), this);
+    connect(d->sheetClose, &QPushButton::clicked, this, [this] { d->openSheet(false); });
+    d->sheetClose->hide();
+  }
 
   // overlays: modal, toasts
   d->backdrop = new Backdrop(this);
@@ -863,27 +960,15 @@ void ChartsApp::setLayout(const QString& layout, bool save) {
     panes << pane;
     created << pane;
   }
-  // re-place every pane in the grid
-  for (auto* p : panes) d->gridLayout->removeWidget(p);
-  for (int c = 0; c < 4; ++c) d->gridLayout->setColumnStretch(c, 0);
-  for (int r = 0; r < 4; ++r) d->gridLayout->setRowStretch(r, 0);
-  for (int c = 0; c < cols; ++c) d->gridLayout->setColumnStretch(c, count == 3 && c == 0 ? 2 : 1);
-  for (int r = 0; r < rows; ++r) d->gridLayout->setRowStretch(r, 1);
-  for (int i = 0; i < panes.size(); ++i) {
-    if (count == 3) {
-      if (i == 0) d->gridLayout->addWidget(panes[0], 0, 0, 2, 1);
-      else d->gridLayout->addWidget(panes[i], i - 1, 1);
-    } else {
-      d->gridLayout->addWidget(panes[i], i / cols, i % cols);
-    }
-    panes[i]->show();
-  }
+  d->cols = cols;
+  d->rows = rows;
   for (auto* p : created) p->load();
   // the active chart stays active when it survives the change (state.active is only as fresh as the last persist)
   if (!active || !panes.contains(active)) {
     const int want = std::min(state.value("active").toInt(0), count - 1);
     setActive(want >= 0 && want < panes.size() ? panes[want] : panes.value(0));
   }
+  d->placePanes();
   d->layoutSel->setCurrentIndex(std::max(0, d->layoutSel->findData(layout)));
   for (auto* p : panes) p->syncActive();   // the outline shows only with several panes
   if (save) persist();
@@ -893,6 +978,7 @@ void ChartsApp::setActive(ChartPane* pane) {
   if (!pane || active == pane) return;
   QPointer<ChartPane> old = active;
   active = pane;
+  if (d->phone) d->placePanes();   // a phone shows the active chart only
   if (old) old->syncActive();   // the pane paints .pane.active::after itself
   pane->syncActive();
   syncToolbar();
@@ -920,7 +1006,10 @@ void ChartsApp::syncToolbar() {
   style::setOn(d->logBtn, p->cfg.value("log").toBool());
   style::setOn(d->replayBtn, p->replay.has_value());
   d->fpGear->setVisible(p->cfg.value("type").toString() == "footprint");
+  if (d->phone) d->applyResponsive();   // the phone's timeframe list and chart type width follow
 }
+
+void ChartsApp::showSidePanel(bool on) { d->openSheet(on); }
 
 void ChartsApp::setTf(const QString& tf) {
   if (!active) return;
@@ -943,6 +1032,7 @@ void ChartsApp::setSymbol(const QString& sym, ChartPane* pane) {
   }
   syncToolbar();
   persist();
+  if (d->phone && d->sheetOpen) d->openSheet(false);   // picked in the sheet (watchlist, news…): back to the chart
 }
 
 void ChartsApp::setTool(const QString& t) {
@@ -1996,6 +2086,109 @@ void ChartsApp::toast(const QString& html, const QString& kind, int ms) {
   });
 }
 
+// The panes in the grid of the layout (setLayout); a phone shows the active one alone.
+void ChartsApp::Impl::placePanes() {
+  auto& panes = q->panes;
+  for (auto* p : panes) gridLayout->removeWidget(p);
+  for (int c = 0; c < 4; ++c) gridLayout->setColumnStretch(c, 0);
+  for (int r = 0; r < 4; ++r) gridLayout->setRowStretch(r, 0);
+  if (phone) {
+    ChartPane* show = q->active ? q->active : panes.value(0);
+    gridLayout->setColumnStretch(0, 1);
+    gridLayout->setRowStretch(0, 1);
+    for (auto* p : panes) {
+      if (p == show) { gridLayout->addWidget(p, 0, 0); p->show(); }
+      else p->hide();
+    }
+    return;
+  }
+  const int count = int(panes.size());
+  for (int c = 0; c < cols; ++c) gridLayout->setColumnStretch(c, count == 3 && c == 0 ? 2 : 1);
+  for (int r = 0; r < rows; ++r) gridLayout->setRowStretch(r, 1);
+  for (int i = 0; i < count; ++i) {
+    if (count == 3) {
+      if (i == 0) gridLayout->addWidget(panes[0], 0, 0, 2, 1);
+      else gridLayout->addWidget(panes[i], i - 1, 1);
+    } else {
+      gridLayout->addWidget(panes[i], i / cols, i % cols);
+    }
+    panes[i]->show();
+  }
+}
+
+void ChartsApp::Impl::applyResponsive() {
+  if (!mainRow) return;
+  const int w = q->width();
+  const bool ph = ::ui::compact(w), nr = w <= 900;
+  if (ph != phone) {
+    phone = ph;
+    if (!phone) drawOpen = false;
+    for (QWidget* x : desktopOnly) x->setVisible(!phone);
+    tfPhone->setVisible(phone);
+    moreBtn->setVisible(phone);
+    // the labelled buttons as icons on a phone (fitTopbar sets them back on wider windows)
+    for (QPushButton* b : {indBtn, replayBtn}) {
+      if (!phone) continue;
+      if (!b->property("fullText").isValid()) b->setProperty("fullText", b->text());
+      b->setText({});
+      b->setProperty("iconOnly", "1");
+      style::repolish(b);
+    }
+    placePanes();
+  }
+  if (phone && q->active) {   // the phone's timeframe list shows the chart's (a custom one is added to it)
+    const QString tf = q->active->cfg.value("tf").toString();
+    if (tfPhone->findData(tf) < 0) tfPhone->addItem(tf, tf);
+    tfPhone->setCurrentIndex(tfPhone->findData(tf));
+  }
+  if (phone) {   // the chart type as wide as its current choice (fitTopbar's level 2), so ⋯ stays on screen
+    const int tw = QFontMetrics(style::font(13)).horizontalAdvance(chartType->currentText()) + 9 + 22 + 24;
+    if (chartType->width() != tw) chartType->setFixedWidth(tw);
+  }
+  sideBtn->setVisible(nr && !phone);
+  drawScroll->setVisible(!phone || drawOpen);
+  if (nr != narrow) {
+    narrow = nr;
+    if (narrow) mainRow->removeWidget(sideBox);
+    else { sheetOpen = false; mainRow->addWidget(sideBox); }
+  }
+  sheetClose->setVisible(narrow && sheetOpen);
+  if (narrow) {
+    sideBox->setVisible(sheetOpen);
+    sheetBack->setVisible(sheetOpen);
+    style::setOn(sideBtn, sheetOpen);
+    placeSheet();
+  } else {
+    sideBox->setFixedWidth(300);
+    if (q->panels && q->panels->side()) q->panels->side()->setFixedWidth(300);   // .side: 300 px
+    sideBox->show();
+    sheetBack->hide();
+  }
+}
+
+void ChartsApp::Impl::placeSheet() {
+  if (!narrow) return;
+  const int top = topScroll ? topScroll->geometry().bottom() + 1 : 44;
+  const QRect area(0, top, q->width(), q->height() - top);
+  sheetBack->setGeometry(area);
+  const int w = phone ? q->width() : std::min(300, q->width());
+  sideBox->setFixedWidth(w);
+  if (q->panels && q->panels->side()) q->panels->side()->setFixedWidth(w);   // the panel fixes its own 300 px
+  sideBox->setGeometry(q->width() - w, top, w, area.height());
+  // phone: top right inside the sheet (the four tabs leave room); narrow window: in the margin left of the sheet
+  sheetClose->move(phone ? q->width() - sheetClose->width() - 6 : q->width() - w - sheetClose->width() - 8, top + 4);
+  sheetBack->raise();
+  sideBox->raise();
+  sheetClose->raise();
+}
+
+void ChartsApp::Impl::openSheet(bool on) {
+  if (!narrow) on = false;
+  if (on == sheetOpen) return;
+  sheetOpen = on;
+  applyResponsive();
+}
+
 void ChartsApp::Impl::placeOverlays() {
   if (backdrop->isVisible()) { backdrop->setGeometry(q->rect()); q->relayoutModal(); }
   toasts.removeAll(nullptr);
@@ -2027,14 +2220,15 @@ bool ChartsApp::eventFilter(QObject* o, QEvent* e) {
 }
 void ChartsApp::resizeEvent(QResizeEvent* e) {
   QWidget::resizeEvent(e);
-  d->sideBox->setVisible(width() > 900);   // @media (max-width: 900px) { .side { display: none } }
+  d->applyResponsive();   // the JS hid the side panel under 900 px (@media (max-width: 900px)); here it becomes a sheet
   d->placeOverlays();
-  if (d->fitTopbar) d->fitTopbar();
+  if (d->fitTopbar && !d->phone) d->fitTopbar();
 }
 void ChartsApp::paintEvent(QPaintEvent*) { QPainter(this).fillRect(rect(), style::v().bg); }
 void ChartsApp::showEvent(QShowEvent* e) {
   QWidget::showEvent(e);
-  if (d->fitTopbar) d->fitTopbar();
+  d->applyResponsive();
+  if (d->fitTopbar && !d->phone) d->fitTopbar();
   checkHealth();
   d->healthTimer.start();
   if (!modalOpen()) setFocus();

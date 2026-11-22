@@ -174,7 +174,7 @@ Panels::Panels(ChartsApp* a) : QObject(a), app(a) {
 }
 
 QWidget* Panels::side() const { return sidePanel; }
-void Panels::showSide(const QString& tab) { sidePanel->showSide(tab); }
+void Panels::showSide(const QString& tab) { sidePanel->showSide(tab); app->showSidePanel(); }   // narrow window: the sheet opens
 void Panels::openAlertDialog(const QJsonObject& preset) { sidePanel->openAlertDialog(preset); }
 void Panels::onAlertFired(const QJsonObject& event) { sidePanel->onAlertFired(event); }
 void Panels::onActiveChange() {
