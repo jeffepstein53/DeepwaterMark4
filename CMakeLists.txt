@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Deepwater VERSION 0.3.1 LANGUAGES CXX)
+project(Deepwater VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 # The organization name that places the settings (Windows: HKCU\Software\<name>\Deepwater) and the user data
 # (%APPDATA%\<name>\Deepwater). A build run next to an installed Deepwater gets its own with -DDW_ORGANIZATION=<other>,
-# so the two never read or write each other's settings and data. Deepwater Mark 3 (2026-11-24) has its own by default,
+# so the two never read or write each other's settings and data. Deepwater Mark 4 (2026-11-24) has its own by default,
 # the one of the corrected copy (deepwater-terminal-corrige); -DDW_ORGANIZATION=deepwater-terminal gives the original's.
 set(DW_ORGANIZATION "deepwater-terminal-corrige" CACHE STRING "Organization name of the settings and the user data")
 
@@ -28,9 +28,9 @@ endif()
 
 # Every .cpp under src/ is part of the app: new pages and services need no edit here.
 file(GLOB_RECURSE DW_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
-# Deepwater Mark 3 has neither the Charts tab nor the AI tab (removed 2026-11-24; their code is in the repository's history).
+# Deepwater Mark 4 has neither the Charts tab nor the AI tab (removed 2026-11-24; their code is in the repository's history).
 # What other pages need from them stays: src/charts/core and four files of src/charts/data (Data › Technical data's
-# indicators, footprints and Binance streams). src/ai holds the former MCP server and its data tools, the base of Mark 3's
+# indicators, footprints and Binance streams). src/ai holds the former MCP server and its data tools, the base of Mark 4's
 # own MCP: not built yet.
 list(FILTER DW_SOURCES EXCLUDE REGEX "/src/ai/")
 if(APPLE)
@@ -81,7 +81,7 @@ if(WIN32)
   # every window the resource named IDI_ICON1 (windows/Deepwater.ico, made by tools/app_icons from
   # resources/icon/deepwater.svg)
   target_sources(Deepwater PRIVATE windows/Deepwater.rc)
-  # Deepwater Mark 3 (2026-11-24): the file's details in Explorer (description, product, version, licence), from
+  # Deepwater Mark 4 (2026-11-24): the file's details in Explorer (description, product, version, licence), from
   # windows/version.rc.in with the project's version
   configure_file(windows/version.rc.in ${CMAKE_BINARY_DIR}/Deepwater-version.rc @ONLY)
   target_sources(Deepwater PRIVATE ${CMAKE_BINARY_DIR}/Deepwater-version.rc)
@@ -251,35 +251,36 @@ if(WIN32)
   set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
   include(InstallRequiredSystemLibraries)
 
-  # Deepwater Mark 3 (2026-11-24): its own name, folder (Program Files\Deepwater Mark 3), Start menu entry and
-  # uninstall entry, so that installing it never replaces nor uninstalls a Deepwater installed in Program Files\Deepwater
-  # ("uninstall before install" below looks only for its own entry, CPACK_PACKAGE_INSTALL_REGISTRY_KEY)
-  set(CPACK_GENERATOR "NSIS;ZIP")
-  set(CPACK_PACKAGE_NAME "Deepwater Mark 3")
-  set(CPACK_PACKAGE_VENDOR "Deepwater Mark 3")
+  # Deepwater Mark 4: published as ONE .exe (windows/installer.nsi, made by NSIS: `cmake --build <build> --target installer`),
+  # per user, without an administrator's consent. The .zip cpack makes is the staging folder the installer is packed
+  # from, and what the `dist` target renames.
+  set(CPACK_GENERATOR "ZIP")
+  set(CPACK_PACKAGE_NAME "Deepwater Mark 4")
+  set(CPACK_PACKAGE_VENDOR "Deepwater Mark 4")
   set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-  set(CPACK_PACKAGE_FILE_NAME "Deepwater-Mark3-${PROJECT_VERSION}-win64")
-  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Deepwater Mark 3 market terminal")
-  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Deepwater Mark 3")
-  set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "Deepwater Mark 3")
-  set(CPACK_PACKAGE_EXECUTABLES "Deepwater;Deepwater Mark 3")         # Start menu shortcut
-  set(CPACK_CREATE_DESKTOP_LINKS "Deepwater")
-  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
-  set(CPACK_NSIS_DISPLAY_NAME "Deepwater Mark 3")
-  set(CPACK_NSIS_PACKAGE_NAME "Deepwater Mark 3")
-  set(CPACK_NSIS_INSTALLED_ICON_NAME "Deepwater.exe")
-  set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/windows/Deepwater.ico")      # the installer's own icon
-  set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/windows/Deepwater.ico")   # and the uninstaller's
-  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-  set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
-  set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Deepwater.exe")
+  set(CPACK_PACKAGE_FILE_NAME "Deepwater-Mark4-${PROJECT_VERSION}-win64")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Deepwater Mark 4 market terminal")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Deepwater Mark 4")
   set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_BINARY_DIR}/dist")
-  # the .zip's own settings (windows/cpack-options.cmake): its inner folder keeps the name Deepwater-Mark3 from one
+  # the .zip's own settings (windows/cpack-options.cmake): its inner folder keeps the name Deepwater-Mark4 from one
   # version to the next, so a new version unzipped over the previous one replaces its files
   set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_SOURCE_DIR}/windows/cpack-options.cmake")
   include(CPack)
   add_custom_target(dist COMMAND ${CMAKE_CPACK_COMMAND} --config ${CMAKE_BINARY_DIR}/CPackConfig.cmake
-                    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/dist/Deepwater-Mark3.zip
-                            ${CMAKE_BINARY_DIR}/dist/Deepwater-Mark3-${PROJECT_VERSION}-win64.zip
+                    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/dist/Deepwater-Mark4.zip
+                            ${CMAKE_BINARY_DIR}/dist/Deepwater-Mark4-${PROJECT_VERSION}-win64.zip
                     WORKING_DIRECTORY ${CMAKE_BINARY_DIR} DEPENDS ${DW_WIN_TARGETS} VERBATIM)
+  # The installer: dist/Deepwater-Mark4-<version>-win64.exe, the file the update check (src/app/Updater.cpp) looks for.
+  # Needs NSIS (makensis on the PATH, or -DDW_MAKENSIS=<makensis.exe>).
+  find_program(DW_MAKENSIS makensis)
+  if(DW_MAKENSIS)
+    file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/_CPack_Packages/win64/ZIP/Deepwater-Mark4" DW_NSIS_STAGE)
+    file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/windows/Deepwater.ico" DW_NSIS_ICON)
+    file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/dist/Deepwater-Mark4-${PROJECT_VERSION}-win64.exe" DW_NSIS_OUT)
+    add_custom_target(installer
+                      COMMAND ${CMAKE_CPACK_COMMAND} -G ZIP --config ${CMAKE_BINARY_DIR}/CPackConfig.cmake
+                      COMMAND ${DW_MAKENSIS} /V2 "/DVERSION=${PROJECT_VERSION}" "/DSTAGE=${DW_NSIS_STAGE}" "/DICON=${DW_NSIS_ICON}"
+                              "/DOUTFILE=${DW_NSIS_OUT}" ${CMAKE_SOURCE_DIR}/windows/installer.nsi
+                      WORKING_DIRECTORY ${CMAKE_BINARY_DIR} DEPENDS ${DW_WIN_TARGETS} VERBATIM)
+  endif()
 endif()

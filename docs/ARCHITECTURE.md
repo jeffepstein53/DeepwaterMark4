@@ -19,8 +19,8 @@ Qt 6.12 (`~/Qt/6.12.0/macos`), C++20, CMake + Ninja, macOS first.
 - `src/pages/<tab>/` — one folder per header tab, one class per page (plus its private widgets).
 - `third_party/quickjs-ng/` — QuickJS-ng v0.18.0 (MIT, see its SOURCES.md): the JavaScript engine of src/charts/core.
 - `src/charts/` — C++ port of Quant Terminal (docs/charts/NOTICE.md): the indicators, footprints and Binance streams of
-  Data › Technical data. The Charts and AI tabs are not part of Mark 3 (their code is in the repository's history).
-- `src/ai/` — the former MCP server and its data tools, the base of Mark 3's own MCP: not built yet.
+  Data › Technical data. The Charts and AI tabs are not part of Mark 4 (their code is in the repository's history).
+- `src/ai/` — the former MCP server and its data tools, the base of Mark 4's own MCP: not built yet.
 - `resources/` — embedded at `:/<path>` (fonts, flags, images); files named `SOURCES*` and `*.md` are not embedded
   and hold licences/origins of the assets.
 

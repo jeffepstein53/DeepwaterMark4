@@ -23,13 +23,13 @@
 
 namespace app {
 namespace {
-// Deepwater Mark 3 (2026-11-24): its own repository (public, so GitHub answers without a sign-in) and its own topic.
-constexpr const char* kRepo = "jeffepstein53/DeepwaterMark3";
+// Deepwater Mark 4 (2026-11-24): its own repository (public, so GitHub answers without a sign-in) and its own topic.
+constexpr const char* kRepo = "jeffepstein53/DeepwaterMark4";
 // The topic .github/workflows/release.yml posts the new tag to. Anyone may post to a public ntfy topic: a message only
 // makes the app ask GitHub, which is what decides.
 constexpr const char* kTopic = "deepwater-mark3-releases-7c0ad207";
 
-const sources::Registrar regGithub({"github-releases", "GitHub (Deepwater Mark 3's releases)",
+const sources::Registrar regGithub({"github-releases", "GitHub (Deepwater Mark 4's releases)",
     {"api.github.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"},
     sources::Access::Keyless, 1000, "Deepwater's new versions: the update check and its download",
     "Public repository; GitHub's REST API without a token (60 requests an hour per address)", {}});
@@ -56,7 +56,7 @@ QString Updater::platformSuffix() {
 #elif defined(Q_OS_MACOS)
   return QStringLiteral("-macos.dmg");
 #elif defined(Q_OS_WIN)
-  return QStringLiteral("-win64.zip");   // Mark 3 is published as a folder to unzip
+  return QStringLiteral("-win64.exe");   // Mark 4 is published as an installer (windows/installer.nsi)
 #else
   return {};
 #endif
@@ -66,13 +66,24 @@ bool Updater::canInstallItself() {
 #if defined(Q_OS_MACOS)
   return true;
 #elif defined(Q_OS_WIN)
-  // Mark 3 is published as a .zip, which cannot install itself: the release page opens, to download and unzip it.
-  // (Never Program Files\Deepwater: an installed original Deepwater is not Mark 3's to replace.)
-  return false;
+  // Mark 4 is published as an installer that runs silently, per user (no administrator's consent), into the folder
+  // this program runs from. (install() never lets it near Program Files\Deepwater: the original's.)
+  return true;
 #else
   return false;
 #endif
 }
+
+#ifdef Q_OS_WIN
+bool Updater::isOriginalsFolder(const QString& dir) {
+  const QString d = QDir::cleanPath(dir);
+  for (const char* var : {"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"}) {
+    const QString pf = qEnvironmentVariable(var);
+    if (!pf.isEmpty() && d.compare(QDir::cleanPath(pf + "/Deepwater"), Qt::CaseInsensitive) == 0) return true;
+  }
+  return false;
+}
+#endif
 
 QString Updater::apiBase() const {
   const QString t = qEnvironmentVariable("DW_UPDATE_API");
@@ -131,10 +142,11 @@ void Updater::onReleases(const QByteArray& json) {
     const QJsonObject o = v.toObject();
     if (o.value("draft").toBool() || o.value("prerelease").toBool()) continue;
     const QString tag = o.value("tag_name").toString();
-    // Mark 3's tags: mark3-0.3.1 (published by hand, without the workflow) or v0.3.1 (release.yml)
-    static const QRegularExpression rx(QStringLiteral("^(?:mark3-|v)(\\d+(?:\\.\\d+){0,2})$"));
+    // Mark 4's tags: mark4-0.4.0 (published by hand, without the workflow), mark3-0.3.1 (Mark 3's, older, so never
+    // newer) or v0.4.0 (release.yml)
+    static const QRegularExpression rx(QStringLiteral("^(?:mark[34]-|v)(\\d+(?:\\.\\d+){0,2})$"));
     const auto m = rx.match(tag);
-    if (!m.hasMatch()) continue;   // any other tag is not a Mark 3 release
+    if (!m.hasMatch()) continue;   // any other tag is not a Mark 4 release
     const QVersionNumber ver = QVersionNumber::fromString(m.captured(1));
     if (ver <= best.version) continue;
     for (const QJsonValue& a : o.value("assets").toArray()) {
@@ -191,6 +203,10 @@ void Updater::connectSocket() {
 void Updater::install() {
   if (m_state != State::Available || m_latest.version.isNull()) return;
   if (!canInstallItself()) { QDesktopServices::openUrl(m_latest.page); return; }
+#ifdef Q_OS_WIN
+  // a Deepwater installed in Program Files\Deepwater is the original's, not Mark 4's to replace: the page opens instead
+  if (isOriginalsFolder(QCoreApplication::applicationDirPath())) { QDesktopServices::openUrl(m_latest.page); return; }
+#endif
   download();
 }
 
@@ -354,17 +370,25 @@ void Updater::installMac(const QString& dmg) {
 #endif
 
 #ifdef Q_OS_WIN
-void Updater::installWindows(const QString& exe) {
-  // The installer replaces files Deepwater is running from: it starts once this process has quit, asks for the
-  // administrator's consent (Program Files), installs silently, then Deepwater starts from where it installed it.
+void Updater::installWindows(const QString& installer) {
+  // The installer replaces files Deepwater is running from, so it starts once this process has quit. It runs
+  // silently and per user (no administrator's consent) into the folder this program runs from, then Deepwater starts
+  // again from there. /D= comes last and is read to the end of the line: no quotes around the path. A test profile
+  // (DW_PROFILE) passes /NOREG: the installer then leaves the registry and the Start menu alone.
   auto psQuote = [](QString s) { s.replace("'", "''"); return "'" + s + "'"; };
-  const QString app = QDir::toNativeSeparators(qEnvironmentVariable("ProgramFiles") + "/Deepwater/Deepwater.exe");
+  const QString dir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
+  const QString app = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+  QStringList args{"'/S'"};
+  if (qEnvironmentVariableIsSet("DW_PROFILE")) args << "'/NOREG'";
+  args << psQuote("/D=" + dir);
   const QString script = QString("Wait-Process -Id %1 -ErrorAction SilentlyContinue; "
-                                 "$p = Start-Process -FilePath %2 -ArgumentList '/S' -Verb RunAs -Wait -PassThru; "
-                                 "if ($p -and $p.ExitCode -eq 0) { Start-Process -FilePath %3 }")
-                             .arg(QCoreApplication::applicationPid()).arg(psQuote(QDir::toNativeSeparators(exe)), psQuote(app));
+                                 "$p = Start-Process -FilePath %2 -ArgumentList %3 -Wait -PassThru; "
+                                 "if ($p -and $p.ExitCode -eq 0) { Remove-Item -LiteralPath %2 -ErrorAction SilentlyContinue }; "
+                                 "Start-Process -FilePath %4")
+                             .arg(QCoreApplication::applicationPid())
+                             .arg(psQuote(QDir::toNativeSeparators(installer)), args.join(","), psQuote(app));
   if (!QProcess::startDetached("powershell.exe", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script})) {
-    setState(State::Available, QCoreApplication::translate("update", "The installer could not be started; run %1 yourself.").arg(exe));
+    setState(State::Available, QCoreApplication::translate("update", "The installer could not be started; run %1 yourself.").arg(installer));
     return;
   }
   qApp->quit();

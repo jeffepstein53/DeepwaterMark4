@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 env:
-  # Deepwater Mark 3's own topic (2026-11-24): a Mark 3 tag never reaches the apps of another Deepwater.
+  # Deepwater Mark 4's own topic (2026-11-24): a Mark 4 tag never reaches the apps of another Deepwater.
   # src/app/Updater.cpp kTopic listens on this one (since 0.3.1).
   NTFY_TOPIC: deepwater-mark3-releases-7c0ad207
 

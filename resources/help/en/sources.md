@@ -60,7 +60,7 @@ Myfxbook, which provides retail sentiment, asks for your e-mail and password ins
 | SEC EDGAR | Total assets of the systemic banks | No |
 | ING THINK | Research notes and forecast tables | No |
 | Banks' research pages | Links only, nothing downloaded | No |
-| GitHub (Deepwater Mark 3's releases) | New versions of Deepwater: the update check and its download | No |
+| GitHub (Deepwater Mark 4's releases) | New versions of Deepwater: the update check and its download | No |
 | ntfy.sh | A message when a new version is published, so the update icon lights up at once | No |
 
 ## Sources graph

@@ -60,7 +60,7 @@ Myfxbook, qui fournit le sentiment retail, demande plutôt votre e-mail et votre
 | SEC EDGAR | Total de bilan des banques systémiques | Non |
 | ING THINK | Notes de recherche et tableaux de prévisions | Non |
 | Pages de recherche des banques | Liens seulement, rien de téléchargé | Non |
-| GitHub (publications de Deepwater Mark 3) | Nouvelles versions de Deepwater : vérification et téléchargement des mises à jour | Non |
+| GitHub (publications de Deepwater Mark 4) | Nouvelles versions de Deepwater : vérification et téléchargement des mises à jour | Non |
 | ntfy.sh | Un message à chaque nouvelle version publiée, pour que l'icône de mise à jour s'allume aussitôt | Non |
 
 ## Sources graph

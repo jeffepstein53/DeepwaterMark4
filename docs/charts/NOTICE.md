@@ -1,6 +1,6 @@
 # src/charts — origin and licences
 
-src/charts (what Data › Technical data uses; the Charts tab itself is not part of Deepwater Mark 3) is a C++ port of
+src/charts (what Data › Technical data uses; the Charts tab itself is not part of Deepwater Mark 4) is a C++ port of
 **Quant Terminal**, used under its MIT licence:
 
     MIT License

@@ -148,9 +148,9 @@ jobs:
           "Installer: $exe, $([math]::Round((Get-Item $exe).Length / 1MB)) MB"
           $i = Start-Process $exe -ArgumentList '/S' -Wait -PassThru
           if ($i.ExitCode -ne 0) { throw "the installer exited with code $($i.ExitCode)" }
-          # its own folder: Program Files\Deepwater Mark 3, never Program Files\Deepwater (the original's)
-          $home_ = Get-Item "$env:ProgramFiles\Deepwater Mark 3" -ErrorAction SilentlyContinue
-          if (-not $home_) { throw "nothing installed in Program Files\Deepwater Mark 3" }
+          # its own folder: Program Files\Deepwater Mark 4, never Program Files\Deepwater (the original's)
+          $home_ = Get-Item "$env:ProgramFiles\Deepwater Mark 4" -ErrorAction SilentlyContinue
+          if (-not $home_) { throw "nothing installed in Program Files\Deepwater Mark 4" }
           if (Test-Path "$env:ProgramFiles\Deepwater") { throw "something was installed in Program Files\Deepwater" }
           "Installed in $($home_.FullName)"
           Get-ChildItem $home_.FullName | Format-Table -AutoSize Mode, Length, Name | Out-String -Width 200

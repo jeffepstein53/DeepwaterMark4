@@ -566,10 +566,6 @@
         <translation>iOS ne permet pas à une app de s'installer elle-même : installez la nouvelle version depuis sa page de publication (Sideloadly, AltStore ou TestFlight).</translation>
     </message>
     <message>
-        <source>Deepwater Mark 3 comes as a .zip: download it from the release page and close Deepwater. Unzip it, then copy what its Deepwater-Mark3 folder holds into this program's folder, replacing the files. Your settings and data stay as they are.</source>
-        <translation>Deepwater Mark 3 est livré en .zip : téléchargez-le depuis la page de publication et fermez Deepwater. Décompressez-le, puis copiez le contenu de son dossier Deepwater-Mark3 dans le dossier de ce programme, en remplaçant les fichiers. Vos réglages et vos données restent tels quels.</translation>
-    </message>
-    <message>
         <source>Looking for a new version…</source>
         <translation>Recherche d'une nouvelle version…</translation>
     </message>

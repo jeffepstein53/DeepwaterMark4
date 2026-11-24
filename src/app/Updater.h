@@ -12,10 +12,10 @@ class QWebSocket;
 class QNetworkReply;
 
 // Deepwater's updates (header icon, app/UpdateDialog), from the GitHub releases of the public repository
-// jeffepstein53/DeepwaterMark3 (Deepwater Mark 3, 2026-11-24; user's choices 2026-11-21: one release per version;
+// jeffepstein53/DeepwaterMark4 (Deepwater Mark 4, 2026-11-24; user's choices 2026-11-21: one release per version;
 // checked at launch and on a WebSocket, never by polling).
 //
-//   Releases     tag mark3-X.Y.Z or vX.Y.Z, assets …-macos.dmg, Deepwater-Mark3-X.Y.Z-win64.zip, -ios.ipa; the release's text is
+//   Releases     tag mark4-X.Y.Z (or mark3-X.Y.Z, or vX.Y.Z), assets …-macos.dmg, Deepwater-Mark4-X.Y.Z-win64.exe, -ios.ipa; the release's text is
 //                what's new. Drafts and pre-releases are ignored; the newest version above this one that has this
 //                platform's file is offered.
 //   Detection    one check at launch, then a WebSocket held open on the ntfy.sh topic the release workflow posts to
@@ -24,7 +24,7 @@ class QNetworkReply;
 //                reconnected (a release published meanwhile).
 //   Install      macOS: the .dmg downloaded, mounted, its app's version checked, then put in place of this one (a
 //                build in a CMake folder installs to /Applications instead: never over a build), and Deepwater
-//                started again. Windows (Mark 3): the .zip cannot install itself, the release page opens. iOS: an app
+//                started again. Windows (Mark 4): the installer runs silently, per user, into the running program's own folder. iOS: an app
 //                cannot install itself, the release page opens (sideloading or TestFlight).
 //   Sources      "github-releases" and "ntfy" in the Sources tab; switched off there, nothing is asked.
 //   Test hooks   DW_UPDATE_API=<base url> (a fake GitHub), DW_UPDATE_NTFY=<ws url>|off, DW_UPDATE_AUTO=1 (installs
@@ -46,7 +46,7 @@ public:
   void start();                   // main(): the launch check, then the WebSocket
   void check();                   // ask GitHub now (the dialog's button; ignored while one is running)
   void install();                 // download + install + start again (macOS, Windows); opens the page (iOS)
-  static bool canInstallItself(); // macOS only (Windows: Mark 3 comes as a .zip)
+  static bool canInstallItself(); // macOS and Windows (an installer that runs silently); iOS cannot
   static QString platformSuffix();// the asset name's end for this platform ("-macos.dmg", …)
 
   State state() const { return m_state; }
@@ -70,7 +70,8 @@ private:
   void installMac(const QString& dmg);
 #endif
 #ifdef Q_OS_WIN
-  void installWindows(const QString& exe);
+  void installWindows(const QString& installer);
+  static bool isOriginalsFolder(const QString& dir);   // Windows: Program Files\Deepwater, the original's
 #endif
   QString apiBase() const;
 

@@ -1,6 +1,6 @@
-# Deepwater Mark 3
+# Deepwater Mark 4
 
-Deepwater Mark 3 est un terminal de marché pour Windows 64 bits. Il réunit dans une seule fenêtre :
+Deepwater Mark 4 est un terminal de marché pour Windows 64 bits. Il réunit dans une seule fenêtre :
 
 - les nouvelles et le calendrier économique ;
 - l'économie et les banques centrales ;
@@ -9,29 +9,24 @@ Deepwater Mark 3 est un terminal de marché pour Windows 64 bits. Il réunit dan
 - le journal de trading et le calcul du risque ;
 - les données macro et techniques que Deepwater enregistre lui-même.
 
-Mark 3 est une version indépendante de Deepwater. Elle n'a ni l'onglet Graphiques ni l'onglet IA, et ne télécharge aucun modèle d'IA. Ses réglages et ses données sont rangés à part de ceux de Deepwater d'origine, si bien que les deux peuvent tourner sur le même PC sans se gêner.
+Mark 4 est une version indépendante de Deepwater. Elle n'a ni l'onglet Graphiques ni l'onglet IA, et ne télécharge aucun modèle d'IA. Ses réglages et ses données sont rangés à part de ceux de Deepwater d'origine, si bien que les deux peuvent tourner sur le même PC sans se gêner.
 
 ## Installer
 
-1. Ouvrez la page [Releases](https://github.com/jeffepstein53/DeepwaterMark3/releases) et téléchargez le dernier fichier `Deepwater-Mark3-X.Y.Z-win64.zip`.
-2. Décompressez-le dans le dossier de votre choix.
-3. Lancez `Deepwater.exe`, qui se trouve dans le dossier décompressé.
+1. Ouvrez la page [Releases](https://github.com/jeffepstein53/DeepwaterMark4/releases) et téléchargez le dernier fichier `Deepwater-Mark4-X.Y.Z-win64.exe`.
+2. Double-cliquez dessus. Une petite fenêtre montre l'avancement, puis Deepwater s'ouvre. Aucun mot de passe administrateur n'est demandé.
 
-Rien d'autre n'est à installer : tout ce dont le programme a besoin est dans le dossier.
+L'installateur place le programme dans `%LOCALAPPDATA%\Programs\Deepwater Mark 4`, ajoute l'icône « Deepwater Mark 4 » au menu Démarrer et une ligne dans « Applications installées », d'où on peut le désinstaller. Désinstaller ne touche ni à vos réglages ni à vos données.
 
 Le programme n'a pas de signature numérique, car celle-ci demande un certificat payant. Au premier lancement d'un fichier téléchargé, Windows peut donc afficher « Windows a protégé votre ordinateur ». Pour lancer quand même, cliquez sur « Informations complémentaires », puis sur « Exécuter quand même ».
 
+Sur la page d'une version, GitHub ajoute lui-même « Source code (zip) » et « Source code (tar.gz) » : ils contiennent le code du programme, pas le programme. À ignorer pour l'installer.
+
 ## Mettre à jour
 
-Deepwater Mark 3 cherche lui-même, à chaque lancement, les nouvelles versions publiées sur cette page. Quand il en trouve une, l'icône de téléchargement en haut à droite le signale et ouvre la page de la nouvelle version.
+Deepwater Mark 4 cherche lui-même, à chaque lancement, les nouvelles versions publiées sur cette page. Quand il en trouve une, l'icône de téléchargement en haut à droite le signale. Un clic sur « Installer et redémarrer » télécharge le nouvel installateur, l'exécute sans rien demander, puis rouvre Deepwater.
 
-Pour l'installer :
-
-1. Fermez Deepwater.
-2. Décompressez le nouveau `.zip`.
-3. Copiez le contenu de son dossier `Deepwater-Mark3` dans le dossier où se trouve votre `Deepwater.exe`, en remplaçant les fichiers.
-
-Vos réglages et vos données ne sont pas dans ce dossier. Ils restent tels quels.
+Vos réglages et vos données ne sont pas dans le dossier du programme. Ils restent tels quels.
 
 ## Où sont vos données
 
@@ -58,10 +53,10 @@ Lancez ces commandes dans une « x64 Native Tools Command Prompt » :
 ```
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:\chemin\vers\Qt\6.12.0\msvc2022_64
 cmake --build build
-cmake --build build --target dist
+cmake --build build --target installer
 ```
 
-Le programme prêt à copier, avec son `.zip` et son installateur, se trouve ensuite dans `build\dist`.
+L'installateur `Deepwater-Mark4-X.Y.Z-win64.exe` se trouve ensuite dans `build\dist` (`--target dist` fabrique en plus un `.zip` du programme).
 
 ## Licence
 

@@ -105,13 +105,8 @@ void UpdateDialog::refresh() {
       status = utr("Version %1 is available.").arg(r.version.toString());
       detail = utr("Installed: version %1.").arg(cur);
       if (r.published.isValid()) detail += " " + utr("Published on %1.").arg(i18n::locale().toString(r.published.toLocalTime().date(), QLocale::LongFormat));
-      if (!app::Updater::canInstallItself()) {
-#ifdef Q_OS_WIN
-        detail += "\n" + utr("Deepwater Mark 3 comes as a .zip: download it from the release page and close Deepwater. Unzip it, then copy what its Deepwater-Mark3 folder holds into this program's folder, replacing the files. Your settings and data stay as they are.");
-#else
+      if (!app::Updater::canInstallItself())
         detail += "\n" + utr("iOS does not let an app install itself: install the new version from its release page (Sideloadly, AltStore, or TestFlight).");
-#endif
-      }
       notes = primary = true;
       break;
     case S::Downloading:

@@ -28,9 +28,9 @@
 #include <iterator>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-  // "Deepwater Mark 3" (2026-11-24): told apart from another Deepwater open beside it. The application's name stays
+  // "Deepwater Mark 4" (2026-11-24): told apart from another Deepwater open beside it. The application's name stays
   // "Deepwater" (main.cpp): it places the settings and the data, which must not move.
-  setWindowTitle("Deepwater Mark 3");
+  setWindowTitle("Deepwater Mark 4");
 #ifdef Q_OS_IOS
   setMinimumSize(1, 1);        // the screen's size, whatever it is (pages lay out for phones: ui/Touch.h)
 #else

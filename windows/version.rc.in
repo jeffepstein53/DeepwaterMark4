@@ -16,11 +16,11 @@ BEGIN
   BEGIN
     BLOCK "040C04B0"
     BEGIN
-      VALUE "FileDescription", "Deepwater Mark 3 — terminal de marché"
+      VALUE "FileDescription", "Deepwater Mark 4 — terminal de marché"
       VALUE "FileVersion", "@PROJECT_VERSION@"
       VALUE "InternalName", "Deepwater"
       VALUE "OriginalFilename", "Deepwater.exe"
-      VALUE "ProductName", "Deepwater Mark 3"
+      VALUE "ProductName", "Deepwater Mark 4"
       VALUE "ProductVersion", "@PROJECT_VERSION@"
       VALUE "LegalCopyright", "Licence GNU AGPL 3.0"
     END
