@@ -10,10 +10,8 @@
 __pycache__/
 *.pyc
 
-# Reference material kept on this machine only (not published, 2026-11-19): the reference app's recordings and the
-# AI tab's visual reference image
+# Reference material kept on this machine only (not published, 2026-11-19): the reference app's recordings
 /Reference/
-/complex-metallic-cube-showing-futuristic-artificial-intelligence.webp
 
 # Logs of tools run in the source folder
 aqtinstall.log

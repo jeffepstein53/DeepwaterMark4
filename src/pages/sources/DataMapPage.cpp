@@ -17,7 +17,7 @@
 #include "app/Pages.h"
 #include "net/Sources.h"
 #include "positioning/Retail.h"
-#include "pages/ai/Fit.h"
+#include "ui/Fit.h"
 #include "ui/Kit.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
@@ -47,8 +47,6 @@ QList<Local> locals() {
       {"local-broker", QT_TRANSLATE_NOOP("sources", "Your broker's exports (MT4, MT5, cTrader)"),
        QT_TRANSLATE_NOOP("sources", "Trade history files and the live bridge files the platforms write on this computer"),
        {"account/track-record", "account/risk-calculator"}},
-      {"local-models", QT_TRANSLATE_NOOP("sources", "Downloaded AI models (files on this computer)"),
-       QT_TRANSLATE_NOOP("sources", "GGUF model files run by the environments, offline"), {"ai/agents"}},
       {"local-clock", QT_TRANSLATE_NOOP("sources", "This computer's clock (computed by Deepwater)"),
        QT_TRANSLATE_NOOP("sources", "Session hours and countdowns are computed from the time zones, no outside data"),
        {"global/market-hours"}},
@@ -97,8 +95,7 @@ QStringList forms(const QString& word) {
 QColor tabColour(const QString& tab) {
   static const QHash<QString, QPair<const char*, const char*>> hues{
       {"global", {"#e8b923", "#a16207"}}, {"news", {"#22d3ee", "#0e7490"}}, {"economy", {"#fb923c", "#c2410c"}},
-      {"positioning", {"#f87171", "#be123c"}}, {"market", {"#4ade80", "#15803d"}}, {"account", {"#94a3b8", "#475569"}},
-      {"ai", {"#a78bfa", "#6d28d9"}}};
+      {"positioning", {"#f87171", "#be123c"}}, {"market", {"#4ade80", "#15803d"}}, {"account", {"#94a3b8", "#475569"}}};
   if (!hues.contains(tab)) return theme::pal().textDim;
   const auto h = hues.value(tab);
   return QColor(theme::isDark() ? h.first : h.second);

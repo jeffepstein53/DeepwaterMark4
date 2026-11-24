@@ -1,6 +1,6 @@
 # Deepwater
 
-Deepwater est un terminal de marché construit entièrement sur des sources publiques. Il réunit données macro, actualités, positionnement, marchés en direct, graphiques avec flux d'ordres, journal de trading et outils d'IA. Ce premier chapitre décrit ce que toutes les pages ont en commun ; chacun des chapitres suivants est consacré à un onglet de l'en-tête.
+Deepwater est un terminal de marché construit entièrement sur des sources publiques. Il réunit données macro, actualités, positionnement, marchés en direct, données techniques avec flux d'ordres et journal de trading. Ce premier chapitre décrit ce que toutes les pages ont en commun ; chacun des chapitres suivants est consacré à un onglet de l'en-tête.
 
 ## Interface
 
@@ -12,7 +12,7 @@ L'horloge donne votre jour, votre date et votre heure locales, et ajoute l'heure
 
 ### Se déplacer
 
-Un clic sur un onglet principal vous ramène au dernier sous-onglet que vous y avez ouvert : vous pouvez ainsi passer d'un graphique au calendrier sans perdre votre place. Au lancement suivant, Deepwater rouvre la page que vous avez quittée.
+Un clic sur un onglet principal vous ramène au dernier sous-onglet que vous y avez ouvert : vous pouvez ainsi passer des marchés au calendrier sans perdre votre place. Au lancement suivant, Deepwater rouvre la page que vous avez quittée.
 
 ### Le comportement des pages
 
@@ -28,7 +28,7 @@ Sur ordinateur, la fenêtre descend jusqu'à 1,024 × 600 et les pages réorgani
 
 ## Raccourcis clavier
 
-Quelques raccourcis fonctionnent partout dans l'application ; les pages qui ont les leurs, comme [Graphiques](help:charts), les donnent dans leur chapitre. Sous Windows, Ctrl remplace ⌘ partout où cette documentation l'écrit.
+Quelques raccourcis fonctionnent partout dans l'application ; les pages qui ont les leurs les donnent dans leur chapitre. Sous Windows, Ctrl remplace ⌘ partout où cette documentation l'écrit.
 
 | Touches | Effet |
 |---|---|
@@ -102,6 +102,6 @@ La fenêtre suit la fenêtre principale quand vous la déplacez ou la redimensio
 
 [Global](help:global) donne la vue d'ensemble : panorama des marchés, récaps de session et heures de marché. [Actualités](help:news) couvre le calendrier économique, le fil d'actualités, la recherche bancaire et le fil Squawk. [Économie](help:economy) rassemble le globe macro et les taux des banques centrales, et [Positionnement](help:positioning) montre comment se placent les traders particuliers, le rapport COT et les banques, ainsi que le sentiment de risque.
 
-[Marchés](help:market) suit les prix en direct et les interprète : vue des marchés, saisonnalité, heatmaps fondamentale et technique, liquidité. [Graphiques](help:charts) est le terminal graphique, avec indicateurs, flux d'ordres, testeur de stratégies et trading fictif. [Compte](help:account) contient votre track record et le calculateur de risque.
+[Marchés](help:market) suit les prix en direct et les interprète : vue des marchés, saisonnalité, heatmaps fondamentale et technique, liquidité. [Compte](help:account) contient votre track record et le calculateur de risque.
 
-Enfin, [Data](help:data) montre les faits économiques et les barres de marché que Deepwater enregistre, [IA](help:ai) réunit modèles de langage, agents et apprentissage automatique, et [Sources](help:sources) liste chaque source de données avec son état et ses clés.
+Enfin, [Data](help:data) montre les faits économiques et les barres de marché que Deepwater enregistre et [Sources](help:sources) liste chaque source de données avec son état et ses clés.

@@ -12,11 +12,8 @@
 #include "app/HelpWindow.h"
 #include "app/UpdateDialog.h"
 #include "core/I18n.h"
-#include "charts/data/Store.h"
 #include "app/Preload.h"
 #include "net/Http.h"
-#include <QJsonArray>
-#include <QJsonObject>
 #include <QTimer>
 #include <QMenuBar>
 #include <QGuiApplication>
@@ -31,7 +28,9 @@
 #include <iterator>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-  setWindowTitle("Deepwater");
+  // "Deepwater Mark 3" (2026-11-24): told apart from another Deepwater open beside it. The application's name stays
+  // "Deepwater" (main.cpp): it places the settings and the data, which must not move.
+  setWindowTitle("Deepwater Mark 3");
 #ifdef Q_OS_IOS
   setMinimumSize(1, 1);        // the screen's size, whatever it is (pages lay out for phones: ui/Touch.h)
 #else
@@ -116,8 +115,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
                                                {"sources/data", "sources/sources-graph"}};
   const QString saved = settings::value("ui.page").toString();
   if (!openPage(renamed.value(saved, saved))) open(0, 0);
-  // after the first page has painted: the Charts page costs a few hundred ms to build
-  QTimer::singleShot(3000, this, &MainWindow::keepPaperOrdersWatched);
   if (qEnvironmentVariableIsSet("DW_NO_PRELOAD")) m_preload = false;
   schedulePreloads(4000);
 }
@@ -168,14 +165,6 @@ QWidget* MainWindow::ensurePage(const QString& id) {
     m_stack->addWidget(page);
   }
   return page;
-}
-
-void MainWindow::keepPaperOrdersWatched() {
-  static const QString kCharts = "charts/charts";
-  if (m_pages.contains(kCharts)) return;
-  const QJsonObject paper = charts::store::read("state", QJsonObject()).toObject().value("paper").toObject();
-  if (paper.value("orders").toArray().isEmpty()) return;
-  ensurePage(kCharts);
 }
 
 void MainWindow::open(int main, int sub) {
@@ -241,7 +230,6 @@ void MainWindow::rebuildPages() {
   m_pages.clear();
   m_header->update();
   if (!openPage(id)) open(0, 0);
-  QTimer::singleShot(0, this, &MainWindow::keepPaperOrdersWatched);   // the Charts page went with the others
   schedulePreloads(2000);
 }
 

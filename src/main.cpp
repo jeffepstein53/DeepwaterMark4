@@ -13,18 +13,12 @@
 #include <QLineEdit>
 #include "app/HelpWindow.h"
 #include "app/Zoom.h"
-#include "ai/McpBridge.h"
-#include "ai/McpServer.h"
 #include "app/Updater.h"
 #include <QSurfaceFormat>
 #include <QScreen>
 #include <QDir>
 #include <QFileInfo>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QPainter>
-#include "ml/Runs.h"
-#include "ai/Evaluation.h"
 
 // Dev flags (all optional, unknown flags are ignored):
 //   --page tab/sub          open this page (e.g. market/seasonality)
@@ -35,7 +29,6 @@
 //   --quit-after ms         quit after this many ms (profiling runs)
 //   --lang en|fr            interface language (saved, as from the Options dialog)
 //   --options               open the Options dialog
-//   --complete-ml-references  no window: add no_skill / persistence / data fingerprint to older ML runs (verified), quit
 //   --theme id              theme (deepwater, ember, abyss, jade, oxide, nova, bloomberg, glacier, dune, sakura; saved)
 //   --layout-audit dir      every page alone at each size: captures + report.txt (see app/LayoutAudit.h); with
 //                           --audit-sizes WxH,WxH (default 1024x600,1280x720,1440x900,1728x1052), --audit-pages a/b,c/d,
@@ -58,12 +51,9 @@ int main(int argc, char** argv) {
   QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 #endif
   // the names first: the saved zoom is read from the settings before the application exists (QT_SCALE_FACTOR)
-  QCoreApplication::setOrganizationName("deepwater-terminal");
+  QCoreApplication::setOrganizationName(QStringLiteral(DW_ORGANIZATION));   // CMakeLists.txt DW_ORGANIZATION
   QCoreApplication::setOrganizationDomain("deepwater-terminal.com");
   QCoreApplication::setApplicationName("Deepwater");
-#ifndef Q_OS_IOS
-  if (ai::mcpbridge::wanted(argc, argv)) return ai::mcpbridge::run(argc, argv);   // started by Claude: no window
-#endif
   zoom::installSaved();
   QApplication app(argc, argv);
   dw::runStartupFunctions();   // iOS: the services Qt could not start inside the constructor (core/Startup.h)
@@ -76,30 +66,18 @@ int main(int argc, char** argv) {
                   {"delay", "ms", "ms", "6000"}, {"goto", "page", "page"}, {"goto-at", "ms", "ms", "5000"}, {"quit-after", "ms", "ms"}, {"layout-audit", "dir", "dir"},
                   {"audit-sizes", "WxH,...", "sizes", "1024x600,1280x720,1440x900,1728x1052"}, {"audit-pages", "ids", "ids"},
                   {"audit-load", "ms", "ms", "5000"}, {"perf-audit", "dir", "dir"}, {"perf-load", "ms", "ms", "6000"},
-                  {"perf-idle", "ms", "ms", "8000"}, {"complete-ml-references", "add the references to older ML runs, then quit"},
+                  {"perf-idle", "ms", "ms", "8000"},
                   {"selftest", "check this platform's PDF and OCR engines, write the result (JSON) to file, then quit", "file"}});
   cli.parse(app.arguments());   // parse(), not process(): unknown flags are ignored
   // --selftest: no window; the platform engines (PDF reader, OCR) checked end to end, for CI (app/SelfTest.h)
   if (cli.isSet("selftest")) return app::selftest::run(cli.value("selftest"));
 
-  // --complete-ml-references: no window; what the app does 20 s after launch for older ML runs (ml::Runs::completeReferences,
-  // the trainer in its sandbox), for every run that needs it, then quits. The ML page is not opened, nothing else starts.
-  if (cli.isSet("complete-ml-references")) {
-    auto& runs = ml::Runs::instance();
-    QObject::connect(&runs, &ml::Runs::referencesDone, &app, [](int added, int refused) {
-      qInfo("[ml] references: %d added, %d refused", added, refused);
-      QCoreApplication::exit(0);
-    });
-    QTimer::singleShot(0, &runs, &ml::Runs::completeReferences);
-    return app.exec();
-  }
   theme::install();
   i18n::installSaved();
   if (cli.isSet("theme")) theme::setCurrent(cli.value("theme"));
   if (cli.isSet("lang")) i18n::setLanguage(cli.value("lang") == "fr" ? i18n::Lang::French : i18n::Lang::English);
   MainWindow w;
   account::BridgeSync::instance();   // live MT4/MT5/cTrader sync runs from launch, not from the first visit
-  ai::Evaluation::instance().resumeForward();   // the agents' forward tests ask at their times while the app runs
   if (cli.isSet("page") && !w.openPage(cli.value("page"))) qWarning("unknown page %s", qPrintable(cli.value("page")));
   if (cli.isSet("size")) {
     const auto wh = cli.value("size").split('x');
@@ -116,15 +94,6 @@ int main(int argc, char** argv) {
   if (cli.isSet("options")) QTimer::singleShot(300, &w, [&w] { w.showOptions(); });
   // updates (app/Updater): the launch check and the release WebSocket; not during the audits, which measure pages
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) app::Updater::instance().start();
-  // Claude outside Deepwater (AI › LLM › Integration): served while the app runs, when switched on
-  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) {
-    ai::McpServer::instance().startExternal();
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, [] {   // only this instance's file (another one may be open)
-      QFile f(ai::McpServer::connectionFile());
-      if (f.open(QIODevice::ReadOnly) && QJsonDocument::fromJson(f.readAll()).object().value("pid").toInteger() == QCoreApplication::applicationPid())
-        f.remove();
-    });
-  }
   if (cli.isSet("updates")) QTimer::singleShot(300, &w, [&w] { w.showUpdates(); });
   if (cli.isSet("help-page"))
     QTimer::singleShot(300, &w, [&w, v = cli.value("help-page"), q = cli.value("help-search")] {

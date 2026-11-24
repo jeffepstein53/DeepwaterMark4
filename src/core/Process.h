@@ -1,6 +1,5 @@
 #pragma once
-// dw::Process: the app's child processes (Claude Code, the local model helper, the Python trainer, the translation
-// helper, Charts' tools). QProcess wherever Qt has it; on iOS (2026-11-21), where an app cannot start another program,
+// dw::Process: the app's child processes (the translation helper). QProcess wherever Qt has it; on iOS (2026-11-21), where an app cannot start another program,
 // a stand-in with the same calls whose start() always fails with FailedToStart, so every feature that needs a process
 // takes the path it already has for "the program could not start" instead of the app not building.
 #include <QtGlobal>

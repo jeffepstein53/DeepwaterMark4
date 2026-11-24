@@ -1,0 +1,4 @@
+// The Windows icon of Deepwater.exe: Explorer, the shortcuts and the installer read it from the exe, and Qt gives it to
+// every window (title bar, taskbar button) because it is named IDI_ICON1. Deepwater.ico is made by tools/app_icons
+// (win) from resources/icon/deepwater.svg.
+IDI_ICON1 ICON "Deepwater.ico"

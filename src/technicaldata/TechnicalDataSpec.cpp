@@ -300,7 +300,7 @@ IndCheck checkIndicator(const QString& id, const QJsonObject& params, const QVec
   IndCheck out;
   const auto finish = [&] { QMutexLocker l(&lock); cache.insert(k, out); return out; };
   if (!storable(id)) {
-    out.reason = QCoreApplication::translate("data", "Not offered: only Charts' built-in indicators that draw lines and need no anchor time can be stored.");
+    out.reason = QCoreApplication::translate("data", "Not offered: only Deepwater's built-in indicators that draw lines and need no anchor time can be stored.");
     return finish();
   }
   const charts::ind::DefPtr def = charts::ind::byId(id);
@@ -363,7 +363,7 @@ IndCheck checkIndicator(const QString& id, const QJsonObject& params, const QVec
     }
     if (out.tfs.isEmpty()) {
       out.reason = QCoreApplication::translate("data", "It depends on more than the %1 bars Deepwater computes again before new ones (a very long window, or "
-                      "the whole history), so stored values would differ from the chart's.").arg(OVERLAP);
+                      "the whole history), so stored values would differ from those computed over the whole history.").arg(OVERLAP);
       return finish();
     }
     out.ok = true;

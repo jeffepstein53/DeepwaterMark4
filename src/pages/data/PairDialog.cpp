@@ -356,7 +356,7 @@ public:
       m_depthBtn = make(QCoreApplication::translate("data", "Book depth"), m_spec.depth);
       m_oiBtn = make(QCoreApplication::translate("data", "Open interest"), m_spec.openInterest);
       m_liveBtn = make(QCoreApplication::translate("data", "Live book (memory)"), m_spec.liveBook);
-      m_liveBtn->setToolTip(QCoreApplication::translate("data", "The order book and the trades of the spot market and the perpetual, kept in memory while Deepwater runs, never written to disk: the agents read the live book and today's footprint from them"));
+      m_liveBtn->setToolTip(QCoreApplication::translate("data", "The order book and the trades of the spot market and the perpetual, kept in memory while Deepwater runs, never written to disk"));
       if (!m_phone) row->addStretch(1);
       bv->addLayout(row);
     }
@@ -840,7 +840,7 @@ private:
     QColor col = c.up;
     if (!m_check.ok) { t = m_check.reason; col = c.down; }
     else {
-      t = QCoreApplication::translate("data", "Can be stored: it never looks ahead, and computed again from %1 bars before new ones it equals the chart's values.").arg(OVERLAP);
+      t = QCoreApplication::translate("data", "Can be stored: it never looks ahead, and computed again from %1 bars before new ones it equals the values computed over the whole history.").arg(OVERLAP);
       if (m_check.running) t += " " + QCoreApplication::translate("data", "A running sum from the first bar: carried over from one piece to the next.");
       if (!m_check.reason.isEmpty()) { t += " " + m_check.reason; col = c.warn; }
     }

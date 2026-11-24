@@ -30,6 +30,14 @@ TvPane::TvPane(QWidget* parent) : QWidget(parent) {
   };
   m_cur = qBound(0, settings::value("news.squawk.tvChannel", 0).toInt(), int(m_channels.size()) - 1);
   setMouseTracking(true);
+  m_wait.setSingleShot(true);
+  m_wait.setInterval(1000);
+  connect(&m_wait, &QTimer::timeout, this, [this] {
+    if (!m_playing) return;
+    load();
+    // the player is there: the message band gives way to it (idle() changed when the loopback server started)
+    if (m_tv && m_tv->available() && onIdleChanged) onIdleChanged();
+  });
 }
 
 int TvPane::preferredHeight(int w, int pageH) const {
@@ -122,7 +130,7 @@ void TvPane::paintEvent(QPaintEvent*) {
   if (!m_tv || !m_tv->isVisible()) {
     p.setFont(theme::mono(11, QFont::Normal, 1)); p.setPen(theme::map("#6d6a62"));
     QString msg;
-    if (m_tv && !m_tv->available()) msg = QCoreApplication::translate("wire", "The live player needs the system web view, and on Windows Charts' local API (Charts settings).\nUse Open on YouTube.");
+    if (m_tv && !m_tv->available()) msg = QCoreApplication::translate("wire", "The live player could not start: it needs the system web view (on Windows, Microsoft Edge WebView2) and a free local port.\nUse Open on YouTube.");
     else if (m_state.startsWith("error")) msg = QCoreApplication::translate("wire", "%1 has no live stream on YouTube right now.\nTry another channel, or Open on YouTube.").arg(m_channels[m_cur].name);
     else if (!m_playing) msg = qEnvironmentVariableIsSet("DW_SQUAWK_NO_TV") ? QStringLiteral("Player off (DW_SQUAWK_NO_TV)") : QCoreApplication::translate("wire", "Paused while the page is hidden");
     else msg = QCoreApplication::translate("wire", "Connecting to %1…").arg(m_channels[m_cur].name);
@@ -154,8 +162,11 @@ void TvPane::moveEvent(QMoveEvent*) { layoutView(); }
 void TvPane::setPlaying(bool on) {
   if (on == m_playing) return;
   m_playing = on;
-  if (on) load();
-  else if (m_tv) { m_tv->clear(); m_tv->setVisible(false); m_state.clear(); }
+  if (on) { m_waits = 0; load(); }
+  else {
+    m_wait.stop();
+    if (m_tv) { m_tv->clear(); m_tv->setVisible(false); m_state.clear(); }
+  }
   update();
 }
 
@@ -170,7 +181,13 @@ void TvPane::load() {
     layoutView();
   }
   m_state.clear();
-  if (!m_tv->available()) { update(); if (onIdleChanged) onIdleChanged(); return; }
+  if (!m_tv->available()) {
+    update();
+    if (onIdleChanged) onIdleChanged();
+    if (m_waits < 15) { ++m_waits; m_wait.start(); }   // the loopback server may start a moment later (m_wait)
+    return;
+  }
+  m_waits = 0;
   const QString id = m_channels[m_cur].id;
   const QString html = QString(R"(<!doctype html><html><head><meta charset="utf-8">
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:absolute;left:0;top:0;width:100%;height:100%;border:0}</style>

@@ -789,8 +789,8 @@
     </message>
     <message>
         <location filename="../src/pages/data/PairDialog.cpp" line="634"/>
-        <source>Can be stored: it never looks ahead, and computed again from %1 bars before new ones it equals the chart&apos;s values.</source>
-        <translation>Peut être stocké : il ne regarde jamais le futur, et recalculé à partir de %1 bougies avant les nouvelles, il donne les mêmes valeurs que le graphique.</translation>
+        <source>Can be stored: it never looks ahead, and computed again from %1 bars before new ones it equals the values computed over the whole history.</source>
+        <translation>Peut être stocké : il ne regarde jamais le futur, et recalculé à partir de %1 bougies avant les nouvelles, il donne les mêmes valeurs qu&apos;un calcul sur tout l&apos;historique.</translation>
     </message>
     <message>
         <location filename="../src/pages/data/PairDialog.cpp" line="635"/>
@@ -1237,8 +1237,8 @@ Il faudrait les retélécharger pour les retrouver.</translation>
     </message>
     <message>
         <location filename="../src/technicaldata/TechnicalDataSpec.cpp" line="286"/>
-        <source>Not offered: only Charts&apos; built-in indicators that draw lines and need no anchor time can be stored.</source>
-        <translation>Non proposé : seuls les indicateurs intégrés de Graphiques qui tracent des lignes et n&apos;ont pas besoin d&apos;heure d&apos;ancrage peuvent être stockés.</translation>
+        <source>Not offered: only Deepwater&apos;s built-in indicators that draw lines and need no anchor time can be stored.</source>
+        <translation>Non proposé : seuls les indicateurs intégrés de Deepwater qui tracent des lignes et n&apos;ont pas besoin d&apos;heure d&apos;ancrage peuvent être stockés.</translation>
     </message>
     <message>
         <location filename="../src/technicaldata/TechnicalDataSpec.cpp" line="305"/>
@@ -1252,8 +1252,8 @@ Il faudrait les retélécharger pour les retrouver.</translation>
     </message>
     <message>
         <location filename="../src/technicaldata/TechnicalDataSpec.cpp" line="348"/>
-        <source>It depends on more than the %1 bars Deepwater computes again before new ones (a very long window, or the whole history), so stored values would differ from the chart&apos;s.</source>
-        <translation>Il dépend de plus que les %1 bougies que Deepwater recalcule avant les nouvelles (une fenêtre très longue, ou tout l&apos;historique) : les valeurs stockées différeraient de celles du graphique.</translation>
+        <source>It depends on more than the %1 bars Deepwater computes again before new ones (a very long window, or the whole history), so stored values would differ from those computed over the whole history.</source>
+        <translation>Il dépend de plus que les %1 bougies que Deepwater recalcule avant les nouvelles (une fenêtre très longue, ou tout l&apos;historique) : les valeurs stockées différeraient d&apos;un calcul sur tout l&apos;historique.</translation>
     </message>
     <message>
         <location filename="../src/technicaldata/TechnicalDataSpec.cpp" line="356"/>
@@ -1540,8 +1540,8 @@ Il faudrait les retélécharger pour les retrouver.</translation>
         <translation>Carnet en direct (mémoire)</translation>
     </message>
     <message>
-        <source>The order book and the trades of the spot market and the perpetual, kept in memory while Deepwater runs, never written to disk: the agents read the live book and today's footprint from them</source>
-        <translation>Le carnet d'ordres et les transactions du marché spot et du perpétuel, gardés en mémoire tant que Deepwater tourne, jamais écrits sur disque : les agents y lisent le carnet en direct et le footprint du jour</translation>
+        <source>The order book and the trades of the spot market and the perpetual, kept in memory while Deepwater runs, never written to disk</source>
+        <translation>Le carnet d'ordres et les transactions du marché spot et du perpétuel, gardés en mémoire tant que Deepwater tourne, jamais écrits sur disque</translation>
     </message>
     <message>
         <source>Footprint spot</source>

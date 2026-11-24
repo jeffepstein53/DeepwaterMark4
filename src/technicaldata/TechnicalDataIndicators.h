@@ -70,7 +70,7 @@ public:
 
 signals:
   void progressChanged();
-  void idle();
+  void idle();   // nothing queued, running or still waiting for its 2 s
 
 private:
   struct Job { QString market; int tf = 0; qint64 from = 0; };

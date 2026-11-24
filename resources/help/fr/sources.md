@@ -20,11 +20,9 @@ L'interrupteur de droite coupe la source : une fois coupée, Deepwater refuse to
 
 ### Clés et mots de passe
 
-Deux sources prennent une clé ici : e-Stat, et Hugging Face avec son jeton facultatif. Collez la clé et appuyez sur **ENREGISTRER LA CLÉ** (ou Entrée) ; **SUPPRIMER** l'efface, et la fiche affiche **● CLÉ ENREGISTRÉE** ou **○ AUCUNE CLÉ**. Une clé n'est gardée que sur cet ordinateur, n'est jamais réaffichée et n'est envoyée qu'à sa propre source. Elle sert dès le prochain rafraîchissement des pages qui la lisent.
+Une source prend une clé ici : e-Stat. Collez la clé et appuyez sur **ENREGISTRER LA CLÉ** (ou Entrée) ; **SUPPRIMER** l'efface, et la fiche affiche **● CLÉ ENREGISTRÉE** ou **○ AUCUNE CLÉ**. Une clé n'est gardée que sur cet ordinateur, n'est jamais réaffichée et n'est envoyée qu'à sa propre source. Elle sert dès le prochain rafraîchissement des pages qui la lisent.
 
 Myfxbook, qui fournit le sentiment retail, demande plutôt votre e-mail et votre mot de passe. **CONNEXION** ouvre la session et **DÉCONNEXION** la ferme ; l'état affiche **● CONNECTÉ**, **… CONNEXION EN COURS**, **○ NON CONNECTÉ** ou **○ SESSION EXPIRÉE — RECONNECTEZ-VOUS**, ou bien l'erreur. Le mot de passe est envoyé une seule fois à Myfxbook en HTTPS et n'est jamais stocké ; seul le jeton de session est gardé, jusqu'à la déconnexion ou son expiration.
-
-Alpaca, Massive (ex-Polygon) et OANDA sont marqués **CLÉ API** mais n'ont pas de champ ici : les Graphiques lisent leurs clés dans leur propre fichier de flux, dans le dossier de données de Deepwater. Claude Code utilise sa propre connexion, établie hors de Deepwater (voir [IA](help:ai)). Quelle que soit la source, les outils des IA ne lisent jamais les clés, les mots de passe ni cet onglet.
 
 ### Les sources
 
@@ -34,20 +32,12 @@ Alpaca, Massive (ex-Polygon) et OANDA sont marqués **CLÉ API** mais n'ont pas 
 | Binance spot (et son miroir public) | Bougies crypto, tickers, meilleur bid/ask, bougies en direct ; bougies de Technical data | Non |
 | Binance futures USD-M | Bougies des perpétuels, bid/ask, open interest, ratio long/short, financement, liquidations en direct | Non |
 | Archives publiques de Binance | Fichiers quotidiens de transactions (historique footprint), profondeur du carnet et open interest du perpétuel | Non |
-| Binance.US | Bougies et tickers crypto, en dernier recours | Non |
-| Bybit | Bougies des perpétuels là où Binance futures est bloqué | Non |
-| Coinbase Exchange | Bougies crypto, bid/ask, produits | Non |
-| Kraken | Bougies crypto et forex, tickers | Non |
 | Dukascopy | Bougies forex (bid) depuis 2003 (Technical data) | Non |
-| Nasdaq | Actions, ETF et indices US : historique, cours, screener, résultats et dividendes, états financiers, titres | Non |
-| Alpaca | Bougies d'actions US | Oui |
-| Massive (ex-Polygon.io) | Agrégats d'actions US et de futures CME | Oui |
-| OANDA | Bougies forex, métaux et CFD de votre compte | Oui |
 | Forex Factory | Calendrier économique de la semaine | Non |
 | Calendrier RSS de Myfxbook | Valeurs réelles des publications récentes | Non |
 | Myfxbook community outlook | % long/short retail, positions, prix moyens | Compte |
 | FinancialJuice, investingLive | Fils de titres | Non |
-| Investing.com, CNBC, MarketWatch, Nasdaq, Cointelegraph, Decrypt | Actualités RSS (et images des articles) | Non |
+| Investing.com, CNBC, MarketWatch, Nasdaq | Actualités RSS (et images des articles) | Non |
 | YouTube | Directs intégrés dans Squawk | Non |
 | Federal Reserve Board | Calendrier du FOMC, communiqués, votes, communiqués de presse | Non |
 | Fed de New York | Taux effectif des fed funds, fourchette cible | Non |
@@ -70,9 +60,7 @@ Alpaca, Massive (ex-Polygon) et OANDA sont marqués **CLÉ API** mais n'ont pas 
 | SEC EDGAR | Total de bilan des banques systémiques | Non |
 | ING THINK | Notes de recherche et tableaux de prévisions | Non |
 | Pages de recherche des banques | Liens seulement, rien de téléchargé | Non |
-| Hub Hugging Face | Recherche et téléchargement de modèles | Jeton facultatif (modèles restreints) |
-| Discord, Slack, Telegram, vos propres webhooks | Rien n'est lu : les alertes déclenchées sont postées à l'URL donnée | Votre propre URL |
-| GitHub (publications de Deepwater) | Nouvelles versions de Deepwater : vérification et téléchargement des mises à jour | Non |
+| GitHub (publications de Deepwater Mark 3) | Nouvelles versions de Deepwater : vérification et téléchargement des mises à jour | Non |
 | ntfy.sh | Un message à chaque nouvelle version publiée, pour que l'icône de mise à jour s'allume aussitôt | Non |
 
 ## Sources graph
@@ -81,7 +69,7 @@ Cette vue répond d'un coup d'œil à la question « d'où cette page tire-t-ell
 
 ### Lire le diagramme
 
-La colonne de gauche réunit toutes les sources, groupées sous **SURTOUT POUR** l'onglet qu'elles alimentent en premier, chacune avec une pastille d'état. En dessous, **LOCAL, HORS RÉSEAU** rassemble ce qui vient de cet ordinateur : les exports de votre courtier (MT4, MT5, cTrader), les modèles d'IA téléchargés et l'horloge de la machine. Les différents flux d'une même institution partagent une seule boîte ; c'est le cas de la Réserve fédérale, de la BCE, de la Banque d'Angleterre, de la Banque du Canada et de Yahoo.
+La colonne de gauche réunit toutes les sources, groupées sous **SURTOUT POUR** l'onglet qu'elles alimentent en premier, chacune avec une pastille d'état. En dessous, **LOCAL, HORS RÉSEAU** rassemble ce qui vient de cet ordinateur : les exports de votre courtier (MT4, MT5, cTrader) et l'horloge de la machine. Les différents flux d'une même institution partagent une seule boîte ; c'est le cas de la Réserve fédérale, de la BCE, de la Banque d'Angleterre, de la Banque du Canada et de Yahoo.
 
 La colonne de droite liste les onglets principaux et leurs sous-onglets dans l'ordre de la navigation, une couleur par onglet. Une courbe relie une source à chaque sous-onglet qu'elle alimente. Le nombre porté par une source compte les sous-onglets qu'elle alimente, celui d'un sous-onglet les sources qu'il lit. La légende donne les couleurs des pastilles : **ACTIVE**, **ÉCHEC**, **EN ATTENTE**, **DÉSACTIVÉE** et **LOCAL**.
 

@@ -20,11 +20,9 @@ The switch on the right stops the source: once it is off, Deepwater refuses ever
 
 ### Keys and passwords
 
-Two sources take a key here: e-Stat, and Hugging Face with its optional token. Paste the key and press **SAVE KEY** (or Enter); **REMOVE** deletes it, and the card shows **● KEY SAVED** or **○ NO KEY**. A key is stored on this computer only, never shown back, and sent only to its own source. It is used from the next refresh of the pages that read it.
+One source takes a key here: e-Stat. Paste the key and press **SAVE KEY** (or Enter); **REMOVE** deletes it, and the card shows **● KEY SAVED** or **○ NO KEY**. A key is stored on this computer only, never shown back, and sent only to its own source. It is used from the next refresh of the pages that read it.
 
 Myfxbook, which provides retail sentiment, asks for your e-mail and password instead. **CONNECT** signs in and **LOG OUT** signs out; the state reads **● CONNECTED**, **… CONNECTING**, **○ NOT CONNECTED** or **○ SESSION EXPIRED — CONNECT AGAIN**, or shows the error. The password is sent once to Myfxbook over HTTPS and never stored; only the session token is kept, until you log out or it expires.
-
-Alpaca, Massive (ex-Polygon) and OANDA are listed as **API KEY** but have no field here: Charts reads their keys from its own feeds file in Deepwater's data folder. Claude Code uses its own sign-in, set up outside Deepwater (see [AI](help:ai)). Whatever the source, the AIs' tools never read keys, passwords or this tab.
 
 ### The sources
 
@@ -34,20 +32,12 @@ Alpaca, Massive (ex-Polygon) and OANDA are listed as **API KEY** but have no fie
 | Binance spot (and its public mirror) | Crypto candles, tickers, best bid/ask, live bars; bars for Technical data | No |
 | Binance USD-M futures | Perpetual candles, bid/ask, open interest, long/short ratio, funding, live liquidations | No |
 | Binance public data archives | Daily trade files (footprint history), perpetual book depth and open interest | No |
-| Binance.US | Crypto candles and tickers, last resort | No |
-| Bybit | Perpetual candles where Binance futures is blocked | No |
-| Coinbase Exchange | Crypto candles, bid/ask, products | No |
-| Kraken | Crypto and forex candles, tickers | No |
 | Dukascopy | Forex bid bars since 2003 (Technical data) | No |
-| Nasdaq | US stocks, ETFs, indices: history, quotes, screener, earnings and dividends, financials, headlines | No |
-| Alpaca | US stock bars | Yes |
-| Massive (ex-Polygon.io) | US stock and CME futures aggregates | Yes |
-| OANDA | Forex, metals and CFD candles of your account | Yes |
 | Forex Factory | Weekly economic calendar | No |
 | Myfxbook calendar RSS | Actual values of recent releases | No |
 | Myfxbook community outlook | Retail long/short %, positions, average prices | Account |
 | FinancialJuice, investingLive | Headline wires | No |
-| Investing.com, CNBC, MarketWatch, Nasdaq, Cointelegraph, Decrypt | News RSS (and the stories' images) | No |
+| Investing.com, CNBC, MarketWatch, Nasdaq | News RSS (and the stories' images) | No |
 | YouTube | Embedded live streams on Squawk | No |
 | Federal Reserve Board | FOMC calendar, statements, votes, press releases | No |
 | New York Fed | Effective fed funds rate, target range | No |
@@ -70,9 +60,7 @@ Alpaca, Massive (ex-Polygon) and OANDA are listed as **API KEY** but have no fie
 | SEC EDGAR | Total assets of the systemic banks | No |
 | ING THINK | Research notes and forecast tables | No |
 | Banks' research pages | Links only, nothing downloaded | No |
-| Hugging Face Hub | Model search and downloads | Optional token (gated models) |
-| Discord, Slack, Telegram, your own webhooks | Nothing read: fired alerts are posted to the URL you gave | Your own URL |
-| GitHub (Deepwater's releases) | New versions of Deepwater: the update check and its download | No |
+| GitHub (Deepwater Mark 3's releases) | New versions of Deepwater: the update check and its download | No |
 | ntfy.sh | A message when a new version is published, so the update icon lights up at once | No |
 
 ## Sources graph
@@ -81,7 +69,7 @@ This view answers the question "where does this page get its data?" at a glance.
 
 ### Reading the diagram
 
-The left column holds every source, grouped under **MAINLY FOR** the tab it feeds first, each with a status dot. Below them, **LOCAL, NOT FROM THE NETWORK** gathers what comes from this computer: your broker's exports (MT4, MT5, cTrader), the downloaded AI models and the computer's clock. The several feeds of one institution share a single box; that is the case for the Federal Reserve, the ECB, the Bank of England, the Bank of Canada and Yahoo.
+The left column holds every source, grouped under **MAINLY FOR** the tab it feeds first, each with a status dot. Below them, **LOCAL, NOT FROM THE NETWORK** gathers what comes from this computer: your broker's exports (MT4, MT5, cTrader) and the computer's clock. The several feeds of one institution share a single box; that is the case for the Federal Reserve, the ECB, the Bank of England, the Bank of Canada and Yahoo.
 
 The right column lists the main tabs and their sub-tabs in the navigation's order, one colour per tab. A curve joins a source to each sub-tab it feeds. The number on a source counts the sub-tabs it feeds, and the number on a sub-tab counts the sources it reads. The legend gives the dot colours: **ACTIVE**, **FAILING**, **WAITING**, **DISABLED** and **LOCAL**.
 

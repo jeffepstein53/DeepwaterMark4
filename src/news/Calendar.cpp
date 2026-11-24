@@ -230,16 +230,23 @@ void Calendar::saveWeek(const QDate& w) {
   f.commit();
 }
 
+// When ForexFactory last answered that next week's file does not exist. Its free export serves only the current week
+// (ff_calendar_nextweek.json answered 404 on Tuesday 2026-11-24, and no week was ever recorded ahead of time): asked at
+// each visit to next week, these misses counted against the export's low rate limit and could earn the whole calendar
+// a "wait 4 minutes" (HTTP 429). Asked again after an hour at most.
+static QDateTime g_nextWeekMissedAt;
+
 void Calendar::load(const QDate& w) {
   readWeek(w);
   const QDate cur = currentWeek();
+  const bool nextRecentlyMissing = g_nextWeekMissedAt.isValid() && g_nextWeekMissedAt.secsTo(QDateTime::currentDateTimeUtc()) < 3600;
   if (w == cur) fetchForexFactory("thisweek");
-  else if (w == cur.addDays(7)) fetchForexFactory("nextweek");
+  else if (w == cur.addDays(7) && !nextRecentlyMissing) fetchForexFactory("nextweek");
   else {
     if (!hasData(w))
-      m_notes[w] = {w < cur ? QT_TRANSLATE_NOOP("news", "No recording for this week. ForexFactory publishes only the current and the next week; "
+      m_notes[w] = {w < cur ? QT_TRANSLATE_NOOP("news", "No recording for this week. ForexFactory's free calendar file covers only the current week; "
                                                     "Deepwater keeps every week it has seen from now on.")
-                            : QT_TRANSLATE_NOOP("news", "Not published yet: ForexFactory publishes the next week's calendar during the week before."),
+                            : QT_TRANSLATE_NOOP("news", "Not published yet: ForexFactory's free calendar file covers only the current week. This week shows here once it begins (on Sunday, New York time)."),
                     QString()};
     QTimer::singleShot(0, this, [this, w] { emit weekLoaded(w); });
   }
@@ -263,11 +270,16 @@ void Calendar::fetchForexFactory(const QString& which) {
       readWeek(target);
       if (!hasData(target))
         m_notes[target] = which == "nextweek" && notPublished
-            ? Note{QT_TRANSLATE_NOOP("news", "Not published yet: ForexFactory publishes the next week's calendar during the week before."), QString()}
+            ? Note{QT_TRANSLATE_NOOP("news", "Not published yet: ForexFactory's free calendar file covers only the current week. This week shows here once it begins (on Sunday, New York time)."), QString()}
             : Note{QT_TRANSLATE_NOOP("news", "ForexFactory calendar unavailable (%1)."), error};
       emit weekLoaded(target);
     };
-    if (!rep.ok()) { failed(rep.error, rep.status == 404 || rep.body.isEmpty()); return; }
+    if (!rep.ok()) {
+      // only ForexFactory's own "no such file" pauses next week's asking; a dropped connection does not
+      if (which == "nextweek" && rep.status == 404) g_nextWeekMissedAt = QDateTime::currentDateTimeUtc();
+      failed(rep.error, rep.status == 404 || rep.body.isEmpty());
+      return;
+    }
     const auto doc = QJsonDocument::fromJson(rep.body);
     QList<Event> fresh;
     QDate weekOf;

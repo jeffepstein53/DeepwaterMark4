@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Deepwater VERSION 0.3.0 LANGUAGES CXX)
+project(Deepwater VERSION 0.3.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,21 +8,31 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
+# The organization name that places the settings (Windows: HKCU\Software\<name>\Deepwater) and the user data
+# (%APPDATA%\<name>\Deepwater). A build run next to an installed Deepwater gets its own with -DDW_ORGANIZATION=<other>,
+# so the two never read or write each other's settings and data. Deepwater Mark 3 (2026-11-24) has its own by default,
+# the one of the corrected copy (deepwater-terminal-corrige); -DDW_ORGANIZATION=deepwater-terminal gives the original's.
+set(DW_ORGANIZATION "deepwater-terminal-corrige" CACHE STRING "Organization name of the settings and the user data")
 
-# MSVC, for every target (llama.cpp included): sources are UTF-8, and __cplusplus must give the real standard
-# (llama-chat.cpp picks its u8 literal form from it; MSVC reports 199711 without /Zc:__cplusplus).
+# MSVC, for every target: sources are UTF-8, and __cplusplus must give the real standard (MSVC reports 199711 without
+# /Zc:__cplusplus).
 if(MSVC)
   add_compile_options(/utf-8 $<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Svg Concurrent Xml Sql OpenGL OpenGLWidgets LinguistTools WebSockets HttpServer)   # HttpServer: Charts local API (src/charts/data/ApiServer)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Svg Concurrent Xml Sql OpenGL OpenGLWidgets LinguistTools WebSockets HttpServer)   # HttpServer: the Squawk player's page (pages/news/squawk)
 enable_language(C)
 if(APPLE)
-  enable_language(OBJC OBJCXX)   # ggml's Metal backend has .m files
+  enable_language(OBJC OBJCXX)
 endif()
 
 # Every .cpp under src/ is part of the app: new pages and services need no edit here.
 file(GLOB_RECURSE DW_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
+# Deepwater Mark 3 has neither the Charts tab nor the AI tab (removed 2026-11-24; their code is in the repository's history).
+# What other pages need from them stays: src/charts/core and four files of src/charts/data (Data › Technical data's
+# indicators, footprints and Binance streams). src/ai holds the former MCP server and its data tools, the base of Mark 3's
+# own MCP: not built yet.
+list(FILTER DW_SOURCES EXCLUDE REGEX "/src/ai/")
 if(APPLE)
   file(GLOB_RECURSE DW_OBJC CONFIGURE_DEPENDS src/*.mm)
   if(IOS)
@@ -36,7 +46,7 @@ if(APPLE)
   set_source_files_properties(src/banks/Pdf.mm src/macro/Ocr.mm src/platform/IosNotify.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 endif()
 
-# JavaScript engine of the Charts tab's custom indicators (src/charts/core/CustomJs): QuickJS-ng vendored in
+# JavaScript engine of src/charts/core (CustomJs, Pine): QuickJS-ng vendored in
 # third_party/quickjs-ng (library sources only, MIT, see its LICENSE and SOURCES.md): the static C library `quickjs`,
 # built from its own folder, outside the src/ glob.
 add_subdirectory(third_party/quickjs-ng)
@@ -46,10 +56,11 @@ add_subdirectory(third_party/lzma)
 add_subdirectory(third_party/miniz)
 
 qt_add_executable(Deepwater MACOSX_BUNDLE ${DW_SOURCES})
-# Charts tab (port of quant-terminal): same floating-point results as the JS, so no fused multiply-add there.
+# src/charts (port of Quant Terminal, docs/charts/NOTICE.md): same floating-point results as the JS, so no fused
+# multiply-add there.
 # src/technicaldata computes the same indicators into Data › Technical data: its tests build it with -ffp-contract=off
 # (tests/technicaldata/CMakeLists.txt), so the app does too, or the shipped values could differ from the tested ones.
-file(GLOB_RECURSE DW_CHARTS_SOURCES CONFIGURE_DEPENDS src/charts/*.cpp src/pages/charts/*.cpp src/technicaldata/*.cpp)
+file(GLOB_RECURSE DW_CHARTS_SOURCES CONFIGURE_DEPENDS src/charts/*.cpp src/technicaldata/*.cpp)
 if(NOT MSVC)
   set_source_files_properties(${DW_CHARTS_SOURCES} PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
 endif()
@@ -66,13 +77,32 @@ if(WIN32)
   # RBNZ pictures read by Windows' own OCR through C++/WinRT (windowsapp; platform/WinOcr.cpp).
   find_package(Qt6 REQUIRED COMPONENTS Pdf PrintSupport WebView)
   target_link_libraries(Deepwater PRIVATE Qt6::Pdf Qt6::PrintSupport Qt6::WebView windowsapp)
+  # the Deepwater logo as the icon of Deepwater.exe, its shortcuts, its title bars and its taskbar button: Qt gives
+  # every window the resource named IDI_ICON1 (windows/Deepwater.ico, made by tools/app_icons from
+  # resources/icon/deepwater.svg)
+  target_sources(Deepwater PRIVATE windows/Deepwater.rc)
+  # Deepwater Mark 3 (2026-11-24): the file's details in Explorer (description, product, version, licence), from
+  # windows/version.rc.in with the project's version
+  configure_file(windows/version.rc.in ${CMAKE_BINARY_DIR}/Deepwater-version.rc @ONLY)
+  target_sources(Deepwater PRIVATE ${CMAKE_BINARY_DIR}/Deepwater-version.rc)
+  # binaries that are published: the assert messages (QT_FORCE_ASSERTS below) name Qt's headers and the sources
+  # without the builder's folders (C:\Users\<name>\…). MSVC's /d1trimfile removes these prefixes from __FILE__, as
+  # -ffile-prefix-map does for iOS below.
+  if(MSVC)
+    get_filename_component(DW_QT_PREFIX "${Qt6_DIR}/../../.." ABSOLUTE)
+    file(TO_NATIVE_PATH "${DW_QT_PREFIX}" DW_QT_PREFIX_NATIVE)
+    file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}" DW_SOURCE_NATIVE)
+    file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}" DW_BINARY_NATIVE)
+    target_compile_options(Deepwater PRIVATE "/d1trimfile:${DW_QT_PREFIX_NATIVE}" "/d1trimfile:${DW_SOURCE_NATIVE}"
+                                             "/d1trimfile:${DW_BINARY_NATIVE}")
+  endif()
 endif()
 # Hardening (audit 2026-11-18, B1; user's choice 2026-11-19): out-of-range accesses in the standard containers
 # (std::vector, std::span, std::string, std::optional…) and in Qt's (QList, QString…) stop the app at the faulty line
 # instead of reading or writing memory at random — a clean crash report instead of silent corruption or a crash
 # elsewhere later. libc++ "fast" mode: the cheap checks only. QT_FORCE_ASSERTS: Qt's own Q_ASSERT bounds checks in its
 # inline container code, otherwise compiled out of every non-Debug build (QT_NO_DEBUG). The cost was measured on the
-# heaviest Charts frames (docs/AUDIT-2026-11-18-FIX-PROMPT.md, B1). -DDW_HARDENING=OFF builds without, for comparison.
+# heaviest Charts frames. -DDW_HARDENING=OFF builds without, for comparison.
 option(DW_HARDENING "Bounds checks in the standard library and Qt containers" ON)
 if(DW_HARDENING)
   target_compile_definitions(Deepwater PRIVATE
@@ -113,7 +143,7 @@ foreach(r ${DW_RESOURCES})
   list(APPEND DW_RESOURCES_ABS ${CMAKE_SOURCE_DIR}/resources/${r})
 endforeach()
 qt_add_resources(Deepwater dw_assets PREFIX "/" BASE resources FILES ${DW_RESOURCES_ABS})
-# Pine Script runtime of the Charts tab (src/charts/core/Pine): PineTS vendored in third_party/pinets (AGPL-3.0, see
+# Pine Script runtime of src/charts/core/Pine: PineTS vendored in third_party/pinets (AGPL-3.0, see
 # its LICENSE and SOURCES.md; Deepwater is AGPL-3.0 because it ships it), embedded at :/pinets/pinets.js.
 qt_add_resources(Deepwater dw_pinets PREFIX "/pinets" BASE third_party/pinets FILES third_party/pinets/pinets.js)
 
@@ -137,7 +167,8 @@ set_target_properties(Deepwater PROPERTIES
   MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
 # The app's version (Help › the update check compares it with the releases' tags): the project's, set once above.
 # (main.cpp only: a new version recompiles one file, not the app)
-set_source_files_properties(src/main.cpp PROPERTIES COMPILE_DEFINITIONS "DW_VERSION=\"${PROJECT_VERSION}\"")
+set_source_files_properties(src/main.cpp PROPERTIES COMPILE_DEFINITIONS
+                            "DW_VERSION=\"${PROJECT_VERSION}\";DW_ORGANIZATION=\"${DW_ORGANIZATION}\"")
 if(APPLE AND NOT IOS)
   # the Dock / Finder icon: the Deepwater logo at every size macOS asks for (macos/Deepwater.icns, made by
   # tools/app_icons from resources/icon/deepwater.svg)
@@ -146,7 +177,7 @@ if(APPLE AND NOT IOS)
   set_source_files_properties(macos/Deepwater.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
   # ---- macOS package: build/dist/Deepwater-<version>-macos.dmg (cmake/MacDist.cmake)
   find_program(DW_MACDEPLOYQT macdeployqt HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" "${Qt6_DIR}/../../../bin")
-  set(DW_DIST_DEPS Deepwater deepwater-llm)
+  set(DW_DIST_DEPS Deepwater)
   if(TARGET dw_translate)
     list(APPEND DW_DIST_DEPS dw_translate)
   endif()
@@ -194,33 +225,6 @@ if(IOS)
                         "-framework Translation")
 endif()
 
-# Local models (AI › Agents): llama.cpp vendored in third_party/llama.cpp (library parts only, MIT) and the helper
-# deepwater-llm (helpers/llm), one process per lit environment, started by src/ai/Engine inside a sandbox. Not on iOS:
-# an iOS app cannot start a helper process (local models are absent there).
-if(NOT IOS)
-set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
-set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
-set(LLAMA_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
-set(GGML_NATIVE OFF CACHE BOOL "" FORCE)            # the app runs on other Macs than the one that built it
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-if(APPLE)
-  set(GGML_METAL ON CACHE BOOL "" FORCE)
-  set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "" FORCE)
-endif()
-add_subdirectory(third_party/llama.cpp EXCLUDE_FROM_ALL)
-add_executable(deepwater-llm helpers/llm/main.cpp)
-target_link_libraries(deepwater-llm PRIVATE llama nlohmann)
-if(APPLE)
-  set_target_properties(deepwater-llm PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Deepwater.app/Contents/MacOS)
-endif()
-add_dependencies(Deepwater deepwater-llm)
-endif()
-
 # French translations: one Qt Linguist file per package (translations/<package>_fr.ts), compiled to .qm and embedded
 # at :/i18n. Update a package's file with: lupdate <its source folders> -ts translations/<package>_fr.ts -no-obsolete
 file(GLOB DW_TS_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/translations/*_fr.ts)
@@ -230,14 +234,14 @@ if(DW_TS_FILES)
   qt_add_resources(Deepwater dw_i18n PREFIX "/i18n" BASE ${CMAKE_BINARY_DIR}/i18n FILES ${DW_QM_FILES})
 endif()
 
-# ---- Windows package: the app, the model runner, Qt's DLLs and plugins (windeployqt), the VC++ runtime beside them, and
+# ---- Windows package: the app, Qt's DLLs and plugins (windeployqt), the VC++ runtime beside them, and
 # an NSIS installer (cpack -G NSIS, or the `dist` target). Everything at the top of the install folder: Qt's deploy
 # script would otherwise put the DLLs in bin/ apart from the executable.
 if(WIN32)
-  target_compile_options(deepwater-llm PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
+  set(DW_WIN_TARGETS Deepwater)
   set(CMAKE_INSTALL_BINDIR ".")
   include(GNUInstallDirs)
-  install(TARGETS Deepwater deepwater-llm RUNTIME DESTINATION .)
+  install(TARGETS ${DW_WIN_TARGETS} RUNTIME DESTINATION .)
   qt_generate_deploy_app_script(TARGET Deepwater OUTPUT_SCRIPT DW_DEPLOY_SCRIPT NO_TRANSLATIONS)
   # Qt's deploy script puts the DLLs in QT_DEPLOY_BIN_DIR, which defaults to the CMAKE_INSTALL_BINDIR seen by
   # find_package(Qt6) ("bin"), where Windows wouldn't look for them: next to the exe instead.
@@ -247,23 +251,35 @@ if(WIN32)
   set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
   include(InstallRequiredSystemLibraries)
 
+  # Deepwater Mark 3 (2026-11-24): its own name, folder (Program Files\Deepwater Mark 3), Start menu entry and
+  # uninstall entry, so that installing it never replaces nor uninstalls a Deepwater installed in Program Files\Deepwater
+  # ("uninstall before install" below looks only for its own entry, CPACK_PACKAGE_INSTALL_REGISTRY_KEY)
   set(CPACK_GENERATOR "NSIS;ZIP")
-  set(CPACK_PACKAGE_NAME "Deepwater")
-  set(CPACK_PACKAGE_VENDOR "Deepwater")
+  set(CPACK_PACKAGE_NAME "Deepwater Mark 3")
+  set(CPACK_PACKAGE_VENDOR "Deepwater Mark 3")
   set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Deepwater market terminal")
-  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Deepwater")
-  set(CPACK_PACKAGE_EXECUTABLES "Deepwater;Deepwater")         # Start menu shortcut
+  set(CPACK_PACKAGE_FILE_NAME "Deepwater-Mark3-${PROJECT_VERSION}-win64")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Deepwater Mark 3 market terminal")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Deepwater Mark 3")
+  set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "Deepwater Mark 3")
+  set(CPACK_PACKAGE_EXECUTABLES "Deepwater;Deepwater Mark 3")         # Start menu shortcut
   set(CPACK_CREATE_DESKTOP_LINKS "Deepwater")
   set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
-  set(CPACK_NSIS_DISPLAY_NAME "Deepwater")
-  set(CPACK_NSIS_PACKAGE_NAME "Deepwater")
+  set(CPACK_NSIS_DISPLAY_NAME "Deepwater Mark 3")
+  set(CPACK_NSIS_PACKAGE_NAME "Deepwater Mark 3")
   set(CPACK_NSIS_INSTALLED_ICON_NAME "Deepwater.exe")
+  set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/windows/Deepwater.ico")      # the installer's own icon
+  set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/windows/Deepwater.ico")   # and the uninstaller's
   set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
   set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
   set(CPACK_NSIS_MUI_FINISHPAGE_RUN "Deepwater.exe")
   set(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_BINARY_DIR}/dist")
+  # the .zip's own settings (windows/cpack-options.cmake): its inner folder keeps the name Deepwater-Mark3 from one
+  # version to the next, so a new version unzipped over the previous one replaces its files
+  set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_SOURCE_DIR}/windows/cpack-options.cmake")
   include(CPack)
   add_custom_target(dist COMMAND ${CMAKE_CPACK_COMMAND} --config ${CMAKE_BINARY_DIR}/CPackConfig.cmake
-                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR} DEPENDS Deepwater deepwater-llm VERBATIM)
+                    COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_BINARY_DIR}/dist/Deepwater-Mark3.zip
+                            ${CMAKE_BINARY_DIR}/dist/Deepwater-Mark3-${PROJECT_VERSION}-win64.zip
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR} DEPENDS ${DW_WIN_TARGETS} VERBATIM)
 endif()

@@ -33,9 +33,6 @@ protected:
   void resizeEvent(QResizeEvent* e) override;
 private:
   QWidget* ensurePage(const QString& id);   // made on first use, not shown
-  // Paper orders fill from the Charts page's quotes and pages are made on first visit: when the saved paper account
-  // has working orders, the Charts page is made now (hidden), so its stops, targets and limits fire without a visit.
-  void keepPaperOrdersWatched();
   void schedulePreloads(int delayMs);
   void preloadNext();
   bool m_preload = true;

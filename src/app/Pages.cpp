@@ -32,18 +32,12 @@ const QList<MainTab>& tabs() {
       {"fundamental-heatmap", QT_TRANSLATE_NOOP("nav", "Fundamental Heatmap"), QT_TRANSLATE_NOOP("nav", "Currencies scored on their fundamentals: growth, inflation, rates, employment.")},
       {"technical-heatmap", QT_TRANSLATE_NOOP("nav", "Technical Heatmap"), QT_TRANSLATE_NOOP("nav", "Every market's technical signals at a glance: trend, momentum, volatility.")},
       {"liquidity", QT_TRANSLATE_NOOP("nav", "Liquidity"), QT_TRANSLATE_NOOP("nav", "Liquidity zones and key levels for each instrument, with the market's current state.")}}},
-    {"charts", QT_TRANSLATE_NOOP("nav", "Charts"), {
-      {"charts", QT_TRANSLATE_NOOP("nav", "Charts"), QT_TRANSLATE_NOOP("nav", "Charts with 88 indicators, drawings, alerts, screener, heatmap, strategy tester, bar replay and paper trading.")}}},
     {"account", QT_TRANSLATE_NOOP("nav", "Account"), {
       {"track-record", QT_TRANSLATE_NOOP("nav", "Track Record"), QT_TRANSLATE_NOOP("nav", "Your trading journal: statistics, drawdown, streaks, an MT4, MT5 and cTrader sync.")},
       {"risk-calculator", QT_TRANSLATE_NOOP("nav", "Risk Calculator"), QT_TRANSLATE_NOOP("nav", "Position size, risk in currency and risk / reward computed before you enter.")}}},
     {"data", QT_TRANSLATE_NOOP("nav", "Data"), {
       {"macro-data", QT_TRANSLATE_NOOP("nav", "Macro data"), QT_TRANSLATE_NOOP("nav", "Every economic fact Deepwater records, real or forecast, linked in chains per indicator.")},
       {"technical-data", QT_TRANSLATE_NOOP("nav", "Technical data"), QT_TRANSLATE_NOOP("nav", "Market bars of the pairs you record, on the timeframes and from the day you choose, with their indicators, for machine learning.")}}},
-    {"ai", QT_TRANSLATE_NOOP("nav", "AI"), {
-      {"models", QT_TRANSLATE_NOOP("nav", "LLM"), QT_TRANSLATE_NOOP("nav", "Language models: local models from the Hugging Face Hub, and integrations such as Claude Code, to load into the cubes.")},
-      {"agents", QT_TRANSLATE_NOOP("nav", "Agents"), QT_TRANSLATE_NOOP("nav", "Four isolated environments: drag a downloaded model onto a cube to load it.")},
-      {"ml", QT_TRANSLATE_NOOP("nav", "ML"), QT_TRANSLATE_NOOP("nav", "Machine learning: build and train supervised, unsupervised, semi-supervised, self-supervised and reinforcement models on Deepwater's data or your CSV files.")}}},
     {"sources", QT_TRANSLATE_NOOP("nav", "Sources"), {
       {"sources", QT_TRANSLATE_NOOP("nav", "Data Sources"), QT_TRANSLATE_NOOP("nav", "Every source Deepwater reads: status, keys and passwords, and a switch to turn each one off.")},
       {"sources-graph", QT_TRANSLATE_NOOP("nav", "Sources graph"), QT_TRANSLATE_NOOP("nav", "Where Deepwater's data comes from, and which tabs use it.")}}},

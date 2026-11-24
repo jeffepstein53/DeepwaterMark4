@@ -14,7 +14,7 @@
 #include "macrodata/Importer.h"
 #include "pages/data/Landscape.h"
 #include "pages/data/MacroCube.h"
-#include "pages/ai/Fit.h"
+#include "ui/Fit.h"
 #include "global/PageScroll.h"
 #include "ui/Touch.h"
 #include <QSlider>

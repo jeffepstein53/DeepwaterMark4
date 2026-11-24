@@ -23,12 +23,13 @@
 
 namespace app {
 namespace {
-constexpr const char* kRepo = "PalmBeachPete53/Deepwater";
+// Deepwater Mark 3 (2026-11-24): its own repository (public, so GitHub answers without a sign-in) and its own topic.
+constexpr const char* kRepo = "jeffepstein53/DeepwaterMark3";
 // The topic .github/workflows/release.yml posts the new tag to. Anyone may post to a public ntfy topic: a message only
 // makes the app ask GitHub, which is what decides.
-constexpr const char* kTopic = "deepwater-releases-pb53-7c1f9e";
+constexpr const char* kTopic = "deepwater-mark3-releases-7c0ad207";
 
-const sources::Registrar regGithub({"github-releases", "GitHub (Deepwater's releases)",
+const sources::Registrar regGithub({"github-releases", "GitHub (Deepwater Mark 3's releases)",
     {"api.github.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"},
     sources::Access::Keyless, 1000, "Deepwater's new versions: the update check and its download",
     "Public repository; GitHub's REST API without a token (60 requests an hour per address)", {}});
@@ -55,18 +56,9 @@ QString Updater::platformSuffix() {
 #elif defined(Q_OS_MACOS)
   return QStringLiteral("-macos.dmg");
 #elif defined(Q_OS_WIN)
-  return QStringLiteral("-win64.exe");
+  return QStringLiteral("-win64.zip");   // Mark 3 is published as a folder to unzip
 #else
   return {};
-#endif
-}
-
-bool Updater::runsFromInstall() {
-#ifdef Q_OS_WIN
-  const QString installed = QDir::cleanPath(qEnvironmentVariable("ProgramFiles") + "/Deepwater");
-  return QDir::cleanPath(QCoreApplication::applicationDirPath()).compare(installed, Qt::CaseInsensitive) == 0;
-#else
-  return true;
 #endif
 }
 
@@ -74,9 +66,9 @@ bool Updater::canInstallItself() {
 #if defined(Q_OS_MACOS)
   return true;
 #elif defined(Q_OS_WIN)
-  // the installer always installs to Program Files: a copy run from the .zip (anywhere else) would stay as it is while
-  // a second one appeared there, so it is offered the release page instead
-  return runsFromInstall();
+  // Mark 3 is published as a .zip, which cannot install itself: the release page opens, to download and unzip it.
+  // (Never Program Files\Deepwater: an installed original Deepwater is not Mark 3's to replace.)
+  return false;
 #else
   return false;
 #endif
@@ -139,9 +131,10 @@ void Updater::onReleases(const QByteArray& json) {
     const QJsonObject o = v.toObject();
     if (o.value("draft").toBool() || o.value("prerelease").toBool()) continue;
     const QString tag = o.value("tag_name").toString();
-    static const QRegularExpression rx(QStringLiteral("^v(\\d+(?:\\.\\d+){0,2})$"));
+    // Mark 3's tags: mark3-0.3.1 (published by hand, without the workflow) or v0.3.1 (release.yml)
+    static const QRegularExpression rx(QStringLiteral("^(?:mark3-|v)(\\d+(?:\\.\\d+){0,2})$"));
     const auto m = rx.match(tag);
-    if (!m.hasMatch()) continue;   // windows-0.1.0, ios-0.1.0: the releases before the update system
+    if (!m.hasMatch()) continue;   // any other tag is not a Mark 3 release
     const QVersionNumber ver = QVersionNumber::fromString(m.captured(1));
     if (ver <= best.version) continue;
     for (const QJsonValue& a : o.value("assets").toArray()) {

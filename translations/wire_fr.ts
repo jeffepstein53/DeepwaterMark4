@@ -343,9 +343,9 @@ Use Open on YouTube.</source>
 Utilisez Ouvrir sur YouTube.</translation>
     </message>
     <message>
-        <source>The live player needs the system web view, and on Windows Charts&apos; local API (Charts settings).
+        <source>The live player could not start: it needs the system web view (on Windows, Microsoft Edge WebView2) and a free local port.
 Use Open on YouTube.</source>
-        <translation>Le lecteur en direct nécessite la vue web du système et, sous Windows, l’API locale de Graphiques (réglages de Graphiques).
+        <translation>Le lecteur en direct n’a pas pu démarrer : il lui faut la vue web du système (sous Windows, Microsoft Edge WebView2) et un port local libre.
 Utilisez Ouvrir sur YouTube.</translation>
     </message>
     <message>

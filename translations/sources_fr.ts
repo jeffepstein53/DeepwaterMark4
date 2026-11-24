@@ -14,16 +14,6 @@
         <translation>Fichiers d&apos;historique et fichiers de pont en direct que les plateformes écrivent sur cet ordinateur</translation>
     </message>
     <message>
-        <location filename="../src/pages/sources/DataMapPage.cpp" line="45"/>
-        <source>Downloaded AI models (files on this computer)</source>
-        <translation>Modèles d&apos;IA téléchargés (fichiers sur cet ordinateur)</translation>
-    </message>
-    <message>
-        <location filename="../src/pages/sources/DataMapPage.cpp" line="46"/>
-        <source>GGUF model files run by the environments, offline</source>
-        <translation>Fichiers de modèles GGUF exécutés par les environnements, hors ligne</translation>
-    </message>
-    <message>
         <location filename="../src/pages/sources/DataMapPage.cpp" line="47"/>
         <source>This computer&apos;s clock (computed by Deepwater)</source>
         <translation>Horloge de cet ordinateur (calculé par Deepwater)</translation>

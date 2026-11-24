@@ -1,6 +1,0 @@
-//@version=5
-// Charts indicator "atr": Pine is the definition, Charts' C++ engine (src/charts/core) executes it.
-// Checked on every build by tests/charts/core/pine_reference_tests.cpp. Inputs titled with Charts' keys, plots with its outputs.
-indicator("Average True Range (ATR)", precision=16)
-length = input.int(14, "length", minval=1)
-plot(ta.atr(length), "value")

@@ -1,7 +1,7 @@
-# Charts tab — origin and licences
+# src/charts — origin and licences
 
-The Charts tab (src/charts, src/pages/charts) is a C++ port of **Quant Terminal**
-(quant-terminal/ at the repo root), used under its MIT licence:
+src/charts (what Data › Technical data uses; the Charts tab itself is not part of Deepwater Mark 3) is a C++ port of
+**Quant Terminal**, used under its MIT licence:
 
     MIT License
     Copyright (c) 2026 Lewis Jackson
@@ -20,7 +20,7 @@ The Charts tab (src/charts, src/pages/charts) is a C++ port of **Quant Terminal*
     CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
 
-Custom indicators (JavaScript files) run in **QuickJS-ng** v0.18.0 (third_party/quickjs-ng, MIT License, Copyright (c)
+JavaScript runs in **QuickJS-ng** v0.18.0 (third_party/quickjs-ng, MIT License, Copyright (c)
 2017-2026 Fabrice Bellard, 2017-2024 Charlie Gordon, 2023-2026 Ben Noordhuis, 2023-2026 Saúl Ibarra Corretgé; full
 text in third_party/quickjs-ng/LICENSE, origin in third_party/quickjs-ng/SOURCES.md).
 

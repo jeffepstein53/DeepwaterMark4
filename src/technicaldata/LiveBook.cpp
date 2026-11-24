@@ -3,10 +3,27 @@
 #include "technicaldata/Collector.h"
 #include "technicaldata/TechnicalDataSpec.h"
 #include "technicaldata/TechnicalDataStore.h"
+#include "net/Sources.h"
 #include <QDateTime>
 #include <QSet>
 
 namespace technicaldata {
+
+namespace {
+// The live book's hosts (the spot and perpetual streams of charts/data/DepthStream and TradeStream, the perpetual REST
+// API of charts/data/BinanceFeed), declared here with this page (declare() merges hosts and pages by id), so that Sources
+// lists them, paces them and lets them be switched off
+const sources::Registrar regLiveSpot({"binance", "Binance (spot market data API)", {"stream.binance.com"}, sources::Access::Keyless, 200,
+    "Live order book and trades over WebSocket (Data › Technical data, live book)",
+    "Public market streams without key (300 connections per 5 min per IP allowed)", {"data/technical-data"}});
+const sources::Registrar regLiveVision({"binance-vision", "Binance (public market-data mirror)", {"data-stream.binance.vision"},
+    sources::Access::Keyless, 200, "Live order book and trades over WebSocket (mirror)", "Binance's public market-data stream mirror",
+    {"data/technical-data"}});
+const sources::Registrar regLiveFut({"binance-futures", "Binance USD-M futures (market data API)", {"fapi.binance.com", "fstream.binance.com"},
+    sources::Access::Keyless, 200, "Perpetual order book and trades, live (Data › Technical data, live book)",
+    "Public market-data endpoints and streams without key; 2400 request weight per minute per IP; we send at most 5 per second",
+    {"data/technical-data"}});
+}  // namespace
 
 LiveBook& LiveBook::instance() {
   static LiveBook* b = new LiveBook;

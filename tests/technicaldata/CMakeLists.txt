@@ -12,7 +12,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 find_package(Qt6 REQUIRED COMPONENTS Core Sql Network Concurrent)
 set(DW_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
-# Charts' indicator engine (the indicators are its values), as the Charts tests build it
+# src/charts/core, the indicator engine (the indicators are its values)
 add_compile_options($<$<CXX_COMPILER_ID:Clang,AppleClang,GNU>:-ffp-contract=off>)
 add_subdirectory(${DW_ROOT}/third_party/quickjs-ng ${CMAKE_CURRENT_BINARY_DIR}/quickjs-ng)
 add_subdirectory(${DW_ROOT}/third_party/lzma ${CMAKE_CURRENT_BINARY_DIR}/lzma)
@@ -33,6 +33,6 @@ add_executable(technicaldata_tests ${CHARTS_CORE}
   ${DW_ROOT}/src/technicaldata/Collector.cpp ${DW_ROOT}/src/technicaldata/Collector.h
   ${DW_ROOT}/src/net/Http.cpp ${DW_ROOT}/src/net/Http.h ${DW_ROOT}/src/net/Sources.cpp ${DW_ROOT}/src/net/Sources.h
   ${DW_ROOT}/src/core/Settings.cpp ${DW_ROOT}/src/core/Paths.cpp)
-target_include_directories(technicaldata_tests PRIVATE ${DW_ROOT}/src ${DW_ROOT}/tests/charts)
+target_include_directories(technicaldata_tests PRIVATE ${DW_ROOT}/src ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(technicaldata_tests PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Concurrent quickjs lzmadec miniz)
 qt_add_resources(technicaldata_tests technicaldata_pinets PREFIX "/pinets" BASE ${DW_ROOT}/third_party/pinets FILES ${DW_ROOT}/third_party/pinets/pinets.js)

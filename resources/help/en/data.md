@@ -1,6 +1,6 @@
 # Data
 
-The Data tab shows what Deepwater records for itself, on this computer. **Macro data** keeps every economic fact the application reads, as linked chains; **Technical data** keeps the market bars of the pairs you choose, with their indicators and order flow. Both feed the agents' tools and the machine-learning data sets of [AI](help:ai), as well as the strategy tester of [Charts](help:charts).
+The Data tab shows what Deepwater records for itself, on this computer. **Macro data** keeps every economic fact the application reads, as linked chains; **Technical data** keeps the market bars of the pairs you choose, with their indicators and order flow.
 
 ## Macro data
 
@@ -69,7 +69,7 @@ This page records the closed market bars of the pairs you choose and shows where
 
 ### What is recorded
 
-Each pair keeps its closed bars on the timeframes you choose among 1m, 5m, 15m, 1h, 4h, 1D and 1W, from its first day or from a day you pick, with the indicator columns you select. Those are computed by Charts' indicator engine on each series' whole history. BTCUSDT is recorded by default, on all seven timeframes, over its whole history and with 23 indicator columns; if you remove it, it stays removed.
+Each pair keeps its closed bars on the timeframes you choose among 1m, 5m, 15m, 1h, 4h, 1D and 1W, from its first day or from a day you pick, with the indicator columns you select. Those are computed by Deepwater's indicator engine on each series' whole history. BTCUSDT is recorded by default, on all seven timeframes, over its whole history and with 23 indicator columns; if you remove it, it stays removed.
 
 Crypto pairs come from Binance spot, public data that needs no key. They are caught up at launch and kept up every minute; a hole is asked for once more, and whatever is still missing after that is the exchange's own outage. Forex comes from Dukascopy bid prices, also without a key: the seven majors (EURUSD, GBPUSD, USDJPY, USDCHF, AUDUSD, USDCAD, NZDUSD), with history from 2003. The forex trading day runs from 17:00 to 17:00 New York time and is published once it is over, so the newest bars are yesterday's, and there are no bars at weekends.
 
@@ -103,9 +103,9 @@ When you add a pair, you first choose **CRYPTO · BINANCE** or **FOREX · DUKASC
 
 The **Footprint** section (crypto only) records **Spot**, **Perpetual USD-M** or both, from the first archive (spot 2017-08-17, perpetual 2019-12-31) or from a date, three months back by default. It stores buyers and sellers at every price level, minute by minute, on levels of one basis point (0.01 % of the price), for about 130 KB a day per market.
 
-**Order book and positions** (crypto only) offers three recordings. **Book depth** takes the perpetual's book out to ±0.2, 1, 2, 3, 4 and 5 % every 30 seconds, from 2023. **Open interest** comes with the long/short ratios every 5 minutes, from 2020. **Live book (memory)** keeps the spot and perpetual book and trades in memory while Deepwater runs, never writing them to disk; the agents read the live book and today's footprint from it.
+**Order book and positions** (crypto only) offers three recordings. **Book depth** takes the perpetual's book out to ±0.2, 1, 2, 3, 4 and 5 % every 30 seconds, from 2023. **Open interest** comes with the long/short ratios every 5 minutes, from 2020. **Live book (memory)** keeps the spot and perpetual book and trades in memory while Deepwater runs, never writing them to disk.
 
-**Indicators** lists the columns, each removable with ✕. **DEFAULT LIST** restores the 23 default columns (averages 20, 50 and 200, Bollinger, RSI 14, MACD, ATR, DMI, Stochastic, OBV, VWAP), and **NONE** keeps bars only. With **ADD AN INDICATOR** you pick any Charts indicator and set it, and Deepwater checks it on test bars: it is accepted only if it never looks ahead and if recomputing it on new bars gives the chart's values. Outputs that look ahead are refused, and their button says why. **ADD** puts the indicator in the list; duplicates are refused.
+**Indicators** lists the columns, each removable with ✕. **DEFAULT LIST** restores the 23 default columns (averages 20, 50 and 200, Bollinger, RSI 14, MACD, ATR, DMI, Stochastic, OBV, VWAP), and **NONE** keeps bars only. With **ADD AN INDICATOR** you pick any indicator of Deepwater's library and set it, and Deepwater checks it on test bars: it is accepted only if it never looks ahead and if recomputing it on new bars gives the values computed over the whole history. Outputs that look ahead are refused, and their button says why. **ADD** puts the indicator in the list; duplicates are refused.
 
 **Size** estimates the bars and disk space for each timeframe. The dialog closes with **ADD THE PAIR** (or **SAVE**), with **CANCEL**, or with **REMOVE THE PAIR**, which deletes every bar and indicator stored for it after asking. Any change that would delete stored data, such as a dropped timeframe, a later first day or a shortened footprint, lists what would go and asks **Delete and save**.
 
@@ -119,7 +119,7 @@ Greyed indicator values are still in their warm-up: among the first bars, long a
 
 This panel appears when the pair records any order flow, with one tab for each kind: **Footprint**, **Book depth**, **Open interest** and **Live book**. It opens on the newest stored day and follows new ones; **‹** and **›** move to the day before or after. If no day is stored yet, wait a little: the collection downloads the newest days first.
 
-The footprint tab switches between **Spot** and **Perpetual USD-M** and shows one row per minute: time, OHLC, volume, bought, sold, delta, trades, levels, POC, value area, buy and sell imbalances, and stacks, each explained by its column tooltip. Click a minute to see its levels on the right. Imbalances use a ratio of 3, as on the Charts footprint.
+The footprint tab switches between **Spot** and **Perpetual USD-M** and shows one row per minute: time, OHLC, volume, bought, sold, delta, trades, levels, POC, value area, buy and sell imbalances, and stacks, each explained by its column tooltip. Click a minute to see its levels on the right. Imbalances use a ratio of 3.
 
 The book depth tab lists the day's snapshots: the bids' share out to ±0.2, ±1 and ±5 %, the cumulative depth by distance (bids −, asks +), the mid price and how far the snapshot reached. The open interest tab has 5-minute rows: contracts open, change, the top traders' long/short ratios (by accounts and by positions), the ratio for all accounts, and the taker buy/sell ratio.
 

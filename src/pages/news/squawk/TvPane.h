@@ -2,6 +2,7 @@
 #include <QWidget>
 #include <QPointer>
 #include <QSet>
+#include <QTimer>
 #include <functional>
 
 
@@ -47,6 +48,10 @@ private:
   void setNoLive(int channel, bool on);
   class NativeTv* m_tv = nullptr;
   bool m_clipped = false;          // hidden by viewClip
+  // No player yet: load() tries again each second, 15 times at most (Windows: the loopback server that serves the
+  // player page could not start yet, e.g. no free port for a moment)
+  QTimer m_wait;
+  int m_waits = 0;
   qreal titleRight() const;
 };
 }

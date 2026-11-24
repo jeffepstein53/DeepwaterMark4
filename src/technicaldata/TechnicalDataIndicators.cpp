@@ -206,7 +206,13 @@ void Indicators::shutdown(int waitMs) {
 
 void Indicators::next() {
   if (m_running || m_stopping) return;
-  if (m_queue.isEmpty()) { m_status.clear(); emit progressChanged(); emit idle(); return; }
+  if (m_queue.isEmpty()) {
+    m_status.clear();
+    emit progressChanged();
+    // changes still waiting for their 2 s are work to come (the timer calls next() again): not idle yet
+    if (!m_debounce.isActive()) emit idle();
+    return;
+  }
   const Job j = m_queue.takeFirst();
   m_running = true;
   QPointer<Indicators> self(this);

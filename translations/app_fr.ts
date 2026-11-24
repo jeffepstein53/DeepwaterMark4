@@ -209,17 +209,6 @@
         <translation>Zones de liquidité et niveaux clés de chaque instrument, avec l&apos;état actuel du marché.</translation>
     </message>
     <message>
-        <location filename="../src/app/Pages.cpp" line="35"/>
-        <location filename="../src/app/Pages.cpp" line="36"/>
-        <source>Charts</source>
-        <translation>Graphiques</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="36"/>
-        <source>Charts with 88 indicators, drawings, alerts, screener, heatmap, strategy tester, bar replay and paper trading.</source>
-        <translation>Graphiques avec 88 indicateurs, dessins, alertes, screener, heatmap, testeur de stratégie, replay de barres et paper trading.</translation>
-    </message>
-    <message>
         <location filename="../src/app/Pages.cpp" line="37"/>
         <source>Account</source>
         <translation>Compte</translation>
@@ -270,31 +259,6 @@
         <translation>Macro data</translation>
     </message>
     <message>
-        <location filename="../src/app/Pages.cpp" line="43"/>
-        <source>AI</source>
-        <translation>IA</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="44"/>
-        <source>LLM</source>
-        <translation>LLM</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="44"/>
-        <source>Language models: local models from the Hugging Face Hub, and integrations such as Claude Code, to load into the cubes.</source>
-        <translation>Modèles de langage : modèles locaux du Hugging Face Hub et intégrations comme Claude Code, à charger dans les cubes.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="45"/>
-        <source>Agents</source>
-        <translation>Agents</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="45"/>
-        <source>Four isolated environments: drag a downloaded model onto a cube to load it.</source>
-        <translation>Quatre environnements isolés : glissez un modèle téléchargé sur un cube pour le charger.</translation>
-    </message>
-    <message>
         <location filename="../src/app/Pages.cpp" line="47"/>
         <source>Sources</source>
         <translation>Sources</translation>
@@ -318,16 +282,6 @@
         <location filename="../src/app/Pages.cpp" line="49"/>
         <source>Where Deepwater&apos;s data comes from, and which tabs use it.</source>
         <translation>D&apos;où viennent les données de Deepwater, et quels onglets les utilisent.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="46"/>
-        <source>ML</source>
-        <translation>ML</translation>
-    </message>
-    <message>
-        <location filename="../src/app/Pages.cpp" line="46"/>
-        <source>Machine learning: build and train supervised, unsupervised, semi-supervised, self-supervised and reinforcement models on Deepwater&apos;s data or your CSV files.</source>
-        <translation>Apprentissage automatique : créer et entraîner des modèles supervisés, non supervisés, semi-supervisés, auto-supervisés et par renforcement sur les données de Deepwater ou vos fichiers CSV.</translation>
     </message>
 </context>
 <context>
@@ -612,8 +566,8 @@
         <translation>iOS ne permet pas à une app de s'installer elle-même : installez la nouvelle version depuis sa page de publication (Sideloadly, AltStore ou TestFlight).</translation>
     </message>
     <message>
-        <source>This copy runs from the .zip, outside the installed Deepwater: download the new .zip from the release page, or use the installer once.</source>
-        <translation>Cette copie tourne depuis le .zip, hors du Deepwater installé : téléchargez le nouveau .zip depuis la page de publication, ou utilisez une fois l'installateur.</translation>
+        <source>Deepwater Mark 3 comes as a .zip: download it from the release page and close Deepwater. Unzip it, then copy what its Deepwater-Mark3 folder holds into this program's folder, replacing the files. Your settings and data stay as they are.</source>
+        <translation>Deepwater Mark 3 est livré en .zip : téléchargez-le depuis la page de publication et fermez Deepwater. Décompressez-le, puis copiez le contenu de son dossier Deepwater-Mark3 dans le dossier de ce programme, en remplaçant les fichiers. Vos réglages et vos données restent tels quels.</translation>
     </message>
     <message>
         <source>Looking for a new version…</source>

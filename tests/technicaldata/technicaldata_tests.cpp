@@ -188,7 +188,7 @@ TEST("market: storing the same bars twice keeps one copy and counts them once") 
 namespace {
 QVector<Kline> minuteFixture() {
   QVector<Kline> out;
-  QFile f(QFileInfo(QString::fromUtf8(__FILE__)).dir().absoluteFilePath("../charts/core/fixtures/binance-btcusdt-1m.csv"));
+  QFile f(QFileInfo(QString::fromUtf8(__FILE__)).dir().absoluteFilePath("fixtures/binance-btcusdt-1m.csv"));
   if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return out;
   while (!f.atEnd()) {
     const QByteArray line = f.readLine().trimmed();

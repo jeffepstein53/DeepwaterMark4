@@ -1,6 +1,6 @@
 # Deepwater
 
-Deepwater is a market terminal built entirely on public sources. It brings together macro data, news, positioning, live markets, charts with order flow, a trading journal and AI tools. This first chapter covers what every page has in common; each of the following chapters is devoted to one tab of the header.
+Deepwater is a market terminal built entirely on public sources. It brings together macro data, news, positioning, live markets, technical data with order flow and a trading journal. This first chapter covers what every page has in common; each of the following chapters is devoted to one tab of the header.
 
 ## Interface
 
@@ -12,7 +12,7 @@ The clock shows your local day, date and time, and adds UTC when there is room. 
 
 ### Moving around
 
-Clicking a main tab takes you back to the sub-tab you last used there, so you can switch between, say, a chart and the calendar without losing your place. At the next launch Deepwater reopens the page you left.
+Clicking a main tab takes you back to the sub-tab you last used there, so you can switch between, say, the markets and the calendar without losing your place. At the next launch Deepwater reopens the page you left.
 
 ### How pages behave
 
@@ -28,7 +28,7 @@ On a computer the window can shrink to 1,024 × 600, and the pages rearrange the
 
 ## Keyboard shortcuts
 
-A few shortcuts work everywhere in the application; the pages that have their own, such as [Charts](help:charts), list them in their chapter. On Windows, use Ctrl wherever this documentation says ⌘.
+A few shortcuts work everywhere in the application; the pages that have their own list them in their chapter. On Windows, use Ctrl wherever this documentation says ⌘.
 
 | Keys | What it does |
 |---|---|
@@ -102,6 +102,6 @@ The window follows the main window when you move or resize it, and you can drag 
 
 [Global](help:global) gives the overall picture: a market overview, session recaps and market hours. [News](help:news) covers the economic calendar, the news feed, bank research and the Squawk wire. [Economy](help:economy) holds the macro globe and central bank rates, and [Positioning](help:positioning) shows how retail traders, the COT report and the banks are placed, along with risk sentiment.
 
-[Market](help:market) follows live prices and reads them: markets watch, seasonality, fundamental and technical heatmaps, liquidity. [Charts](help:charts) is the charting terminal, with indicators, order flow, the strategy tester and paper trading. [Account](help:account) holds your track record and the risk calculator.
+[Market](help:market) follows live prices and reads them: markets watch, seasonality, fundamental and technical heatmaps, liquidity. [Account](help:account) holds your track record and the risk calculator.
 
-Finally, [Data](help:data) shows the economic facts and market bars that Deepwater records, [AI](help:ai) brings together language models, agents and machine learning, and [Sources](help:sources) lists every data source with its state and keys.
+Finally, [Data](help:data) shows the economic facts and market bars that Deepwater records and [Sources](help:sources) lists every data source with its state and keys.

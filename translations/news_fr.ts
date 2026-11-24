@@ -130,14 +130,14 @@
     </message>
     <message>
         <location filename="../src/news/Calendar.cpp" line="222"/>
-        <source>No recording for this week. ForexFactory publishes only the current and the next week; Deepwater keeps every week it has seen from now on.</source>
-        <translation>Aucun enregistrement pour cette semaine. ForexFactory ne publie que la semaine en cours et la suivante ; Deepwater conserve désormais chaque semaine vue.</translation>
+        <source>No recording for this week. ForexFactory&apos;s free calendar file covers only the current week; Deepwater keeps every week it has seen from now on.</source>
+        <translation>Aucun enregistrement pour cette semaine. Le fichier gratuit du calendrier ForexFactory ne couvre que la semaine en cours ; Deepwater conserve désormais chaque semaine vue.</translation>
     </message>
     <message>
         <location filename="../src/news/Calendar.cpp" line="224"/>
         <location filename="../src/news/Calendar.cpp" line="247"/>
-        <source>Not published yet: ForexFactory publishes the next week&apos;s calendar during the week before.</source>
-        <translation>Pas encore publié : ForexFactory publie le calendrier de la semaine suivante pendant la semaine précédente.</translation>
+        <source>Not published yet: ForexFactory&apos;s free calendar file covers only the current week. This week shows here once it begins (on Sunday, New York time).</source>
+        <translation>Pas encore publiée : le fichier gratuit du calendrier ForexFactory ne couvre que la semaine en cours. Cette semaine s&apos;affichera ici dès qu&apos;elle commencera (le dimanche, heure de New York).</translation>
     </message>
     <message>
         <location filename="../src/news/Calendar.cpp" line="248"/>

@@ -227,6 +227,72 @@ private:
   QStringList m_cols;
 };
 
+// The bars' table with its time column frozen on the left: the thirty-odd columns of prices and indicators scroll
+// sideways under it and each row's time stays in view (audit 2026-11-24: 1,146 px to scroll at 1600x1000, and once
+// scrolled nothing told which bar a value belonged to). Qt's "frozen column" pattern: a second view of the same model,
+// showing only column 0, laid over the first one and scrolled with it.
+class FrozenTimeTable : public QTableView {
+public:
+  explicit FrozenTimeTable(QWidget* parent) : QTableView(parent), m_frozen(new QTableView(this)) {
+    m_frozen->setFocusPolicy(Qt::NoFocus);
+    m_frozen->verticalHeader()->hide();
+    m_frozen->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    m_frozen->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_frozen->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_frozen->setFrameShape(QFrame::NoFrame);
+    m_frozen->setShowGrid(false);
+    m_frozen->setSelectionMode(QAbstractItemView::NoSelection);
+    viewport()->stackUnder(m_frozen);
+    connect(horizontalHeader(), &QHeaderView::sectionResized, this, [this](int i, int, int w) {
+      if (i == 0) { m_frozen->setColumnWidth(0, w); place(); }
+    });
+    connect(verticalHeader(), &QHeaderView::sectionResized, this, [this](int i, int, int h) { m_frozen->setRowHeight(i, h); });
+    connect(m_frozen->verticalScrollBar(), &QAbstractSlider::valueChanged, verticalScrollBar(), &QAbstractSlider::setValue);
+    connect(verticalScrollBar(), &QAbstractSlider::valueChanged, m_frozen->verticalScrollBar(), &QAbstractSlider::setValue);
+  }
+  void setModel(QAbstractItemModel* m) override {
+    QTableView::setModel(m);
+    m_frozen->setModel(m);
+    // after the views' own handling of a reset: only the time column in the frozen view, as wide as the table's
+    connect(m, &QAbstractItemModel::modelReset, this, [this] { sync(); }, Qt::QueuedConnection);
+    connect(m, &QAbstractItemModel::columnsInserted, this, [this] { sync(); }, Qt::QueuedConnection);
+    sync();
+  }
+  // the same look as the table (called once the table is styled)
+  void copyLook() {
+    m_frozen->setFont(font());
+    m_frozen->horizontalHeader()->setFont(horizontalHeader()->font());
+    m_frozen->horizontalHeader()->setDefaultAlignment(horizontalHeader()->defaultAlignment());
+    m_frozen->verticalHeader()->setDefaultSectionSize(verticalHeader()->defaultSectionSize());
+    m_frozen->setStyleSheet(styleSheet());
+    sync();
+  }
+
+protected:
+  void resizeEvent(QResizeEvent* e) override { QTableView::resizeEvent(e); sync(); }
+  void scrollTo(const QModelIndex& index, ScrollHint hint = EnsureVisible) override {
+    if (index.column() > 0) QTableView::scrollTo(index, hint);
+  }
+
+private:
+  void sync() {
+    if (!model()) return;
+    for (int c = 1; c < model()->columnCount(); ++c) m_frozen->setColumnHidden(c, true);
+    m_frozen->setColumnHidden(0, false);
+    m_frozen->setColumnWidth(0, columnWidth(0));
+    m_frozen->horizontalHeader()->setFixedHeight(horizontalHeader()->height());
+    m_frozen->verticalScrollBar()->setValue(verticalScrollBar()->value());
+    place();
+  }
+  void place() {
+    // over the table's header and rows, never over its sideways scroll bar
+    const int head = horizontalHeader()->height();
+    m_frozen->setGeometry(viewport()->x(), viewport()->y() - head, columnWidth(0), viewport()->height() + head);
+    m_frozen->setVisible(model() && model()->columnCount() > 1);
+  }
+  QTableView* m_frozen;
+};
+
 // ------------------------------------------------------------------------------------------------ page
 class TechnicalDataPage : public QWidget {
 public:
@@ -344,7 +410,7 @@ public:
     m_tfBar = new ui::PillBar(tfs, right);
     m_tfBar->setCurrent(3);   // 1h
     right->headerRight()->addWidget(m_tfBar);
-    m_table = new QTableView(right);
+    m_table = new FrozenTimeTable(right);
     m_table->setModel(&m_model);
     m_table->verticalHeader()->hide();
     m_table->setShowGrid(false);
@@ -359,6 +425,7 @@ public:
                                    "QHeaderView::section { background: %1; color: %3; border: none; border-bottom: 1px solid %4; padding: 4px 8px; }"
                                    "QTableView::item { border-bottom: 1px solid %5; padding: 0 8px; }")
                                .arg(c.panel.name(), c.text.name(), c.textMute.name(), c.divider.name(), theme::alpha(c.divider, 120).name(QColor::HexArgb)));
+    m_table->copyLook();   // the time column, frozen on the left, looks like the rest
     right->body()->addWidget(m_table, 1);
     // the footprint's own table (user's choice 2026-11-20), under the bars
     auto* rightCol = new QVBoxLayout;
@@ -368,7 +435,8 @@ public:
     rightCol->addWidget(m_fpPanel, 1);
     body->addLayout(rightCol, 1);
 
-    connect(m_tfBar, &ui::PillBar::changed, this, [this](int) { m_barsDirty = true; refresh(); });
+    // another timeframe has other widths (a day's volume or ATR is longer than an hour's): sized again, else cut with …
+    connect(m_tfBar, &ui::PillBar::changed, this, [this](int) { m_barsDirty = m_firstFill = true; refresh(); });
     connect(&Store::instance(), &Store::pairsChanged, this, [this](const QString&) { m_deleting.clear(); reloadPairs(); });
     connect(&Store::instance(), &Store::pausedChanged, this, [this](const QString&) { reloadPairs(); });
     auto dirty = [this] { m_dirty = true; };
@@ -388,7 +456,7 @@ public:
     if (qEnvironmentVariableIsSet("DW_TECHNICALDATA_TF")) {
       const QString t = qEnvironmentVariable("DW_TECHNICALDATA_TF");
       const int i = m_tfNames.indexOf(t);
-      m_tfBar->setCurrent(i >= 0 ? i : t.toInt());
+      m_tfBar->setCurrent(i >= 0 ? i : t.toInt(), true);   // as a click: the table sized again for that timeframe
     }
     // test hook: a sequence of steps, as a user would do them, with what the page shows written down at each step:
     //   DW_TECHNICALDATA_STEPS="pick:BINANCE:ETHUSDT;waitfor:complete:90000;dump:/tmp/a.txt;pause;dump:/tmp/a.txt;
@@ -723,7 +791,11 @@ private:
       const int scroll = m_table->horizontalScrollBar()->value();
       m_model.set(tf, bars, rows, st.indicatorColumns(mk), warmupOf(spec), dukascopy::isForex(mk));
       // sized to the values once there are some (indicators come a little after the bars)
-      if (m_firstFill) { m_table->resizeColumnsToContents(); m_firstFill = bars.isEmpty() || rows.isEmpty(); }
+      if (m_firstFill) {
+        m_table->ensurePolished();   // the style sheet's padding counted, even when filled before the page is shown
+        m_table->resizeColumnsToContents();
+        m_firstFill = bars.isEmpty() || rows.isEmpty();
+      }
       m_table->horizontalScrollBar()->setValue(scroll);
     }
   }
@@ -738,7 +810,7 @@ private:
   int m_stepNo = 0;
   QElapsedTimer m_waitClock;
   QString m_deleting;
-  QTableView* m_table;
+  FrozenTimeTable* m_table;
   BarsModel m_model;
   QTimer m_timer;
   bool m_dirty = true, m_barsDirty = true, m_firstFill = true;

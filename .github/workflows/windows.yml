@@ -90,7 +90,7 @@ jobs:
           Expand-Archive $zip -DestinationPath smoke-app -Force
           $dir = (Get-ChildItem smoke-app -Directory | Select-Object -First 1).FullName
           Get-ChildItem $dir | Format-Table -AutoSize Mode, Length, Name | Out-String -Width 200
-          foreach ($f in 'Deepwater.exe', 'deepwater-llm.exe', 'Qt6Core.dll', 'Qt6HttpServer.dll', 'Qt6WebSockets.dll', 'Qt6Pdf.dll', 'Qt6PrintSupport.dll', 'Qt6WebView.dll', 'qt.conf', 'msvcp140.dll') {
+          foreach ($f in 'Deepwater.exe', 'Qt6Core.dll', 'Qt6HttpServer.dll', 'Qt6WebSockets.dll', 'Qt6Pdf.dll', 'Qt6PrintSupport.dll', 'Qt6WebView.dll', 'qt.conf', 'msvcp140.dll') {
             if (-not (Test-Path "$dir\$f")) { throw "$f isn't at the top of the packed folder" }
           }
           # the Squawk player's backend is a plugin: windeployqt must have brought it
@@ -148,10 +148,12 @@ jobs:
           "Installer: $exe, $([math]::Round((Get-Item $exe).Length / 1MB)) MB"
           $i = Start-Process $exe -ArgumentList '/S' -Wait -PassThru
           if ($i.ExitCode -ne 0) { throw "the installer exited with code $($i.ExitCode)" }
-          $home_ = Get-ChildItem "$env:ProgramFiles" -Directory -Filter 'Deepwater*' | Select-Object -First 1
-          if (-not $home_) { throw "nothing installed under Program Files" }
+          # its own folder: Program Files\Deepwater Mark 3, never Program Files\Deepwater (the original's)
+          $home_ = Get-Item "$env:ProgramFiles\Deepwater Mark 3" -ErrorAction SilentlyContinue
+          if (-not $home_) { throw "nothing installed in Program Files\Deepwater Mark 3" }
+          if (Test-Path "$env:ProgramFiles\Deepwater") { throw "something was installed in Program Files\Deepwater" }
           "Installed in $($home_.FullName)"
           Get-ChildItem $home_.FullName | Format-Table -AutoSize Mode, Length, Name | Out-String -Width 200
-          foreach ($f in 'Deepwater.exe', 'deepwater-llm.exe', 'Qt6Core.dll', 'Uninstall.exe') {
+          foreach ($f in 'Deepwater.exe', 'Qt6Core.dll', 'Uninstall.exe') {
             if (-not (Test-Path "$($home_.FullName)\$f")) { throw "$f wasn't installed" }
           }
