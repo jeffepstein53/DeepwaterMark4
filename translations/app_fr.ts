@@ -376,6 +376,66 @@
         <source>Size of the whole interface. %1 % is chosen: it applies when Deepwater restarts.</source>
         <translation>Taille de toute l&apos;interface. %1 % est choisi : il s&apos;applique au redémarrage de Deepwater.</translation>
     </message>
+    <message>
+        <source>CLAUDE</source>
+        <translation>CLAUDE</translation>
+    </message>
+    <message>
+        <source>Claude Code and Claude Desktop can read what Deepwater's pages show (read only, never an order), while Deepwater is open. What Claude reads is sent to Anthropic.</source>
+        <translation>Claude Code et Claude Desktop peuvent lire ce que montrent les pages de Deepwater (lecture seule, jamais un ordre), tant que Deepwater est ouvert. Ce que Claude lit est envoyé à Anthropic.</translation>
+    </message>
+    <message>
+        <source>Let Claude read Deepwater's data</source>
+        <translation>Laisser Claude lire les données de Deepwater</translation>
+    </message>
+    <message>
+        <source>Include my trading journal</source>
+        <translation>Inclure mon journal de trading</translation>
+    </message>
+    <message>
+        <source>ON</source>
+        <translation>OUI</translation>
+    </message>
+    <message>
+        <source>OFF</source>
+        <translation>NON</translation>
+    </message>
+    <message>
+        <source>ADD TO CLAUDE CODE</source>
+        <translation>AJOUTER À CLAUDE CODE</translation>
+    </message>
+    <message>
+        <source>REMOVE FROM CLAUDE CODE</source>
+        <translation>RETIRER DE CLAUDE CODE</translation>
+    </message>
+    <message>
+        <source>ADD TO CLAUDE DESKTOP</source>
+        <translation>AJOUTER À CLAUDE DESKTOP</translation>
+    </message>
+    <message>
+        <source>REMOVE FROM CLAUDE DESKTOP</source>
+        <translation>RETIRER DE CLAUDE DESKTOP</translation>
+    </message>
+    <message>
+        <source>Added to Claude Desktop. Restart Claude Desktop, and keep Deepwater open.</source>
+        <translation>Ajouté à Claude Desktop. Redémarrez Claude Desktop et gardez Deepwater ouvert.</translation>
+    </message>
+    <message>
+        <source>Removed from Claude Desktop.</source>
+        <translation>Retiré de Claude Desktop.</translation>
+    </message>
+    <message>
+        <source>Added to Claude Code. Restart Claude Code, then check with /mcp.</source>
+        <translation>Ajouté à Claude Code. Redémarrez Claude Code, puis vérifiez avec /mcp.</translation>
+    </message>
+    <message>
+        <source>Removed from Claude Code.</source>
+        <translation>Retiré de Claude Code.</translation>
+    </message>
+    <message>
+        <source>Working…</source>
+        <translation>En cours…</translation>
+    </message>
 </context>
 <context>
     <name>theme</name>
@@ -624,6 +684,29 @@
     <message>
         <source>Version %1 is available.</source>
         <translation>La version %1 est disponible.</translation>
+    </message>
+</context>
+<context>
+    <name>ai</name>
+    <message>
+        <source>Claude Code could not start.</source>
+        <translation>Claude Code n'a pas pu démarrer.</translation>
+    </message>
+    <message>
+        <source>Not available on this device.</source>
+        <translation>Indisponible sur cet appareil.</translation>
+    </message>
+    <message>
+        <source>Claude Code is not installed on this computer.</source>
+        <translation>Claude Code n'est pas installé sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Claude Desktop is not installed on this computer.</source>
+        <translation>Claude Desktop n'est pas installé sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>%1 is not valid JSON: fix it or add the entry by hand.</source>
+        <translation>%1 n'est pas du JSON valide : corrigez-le ou ajoutez l'entrée à la main.</translation>
     </message>
 </context>
 </TS>

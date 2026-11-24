@@ -34,7 +34,7 @@ QByteArray rpcError(const QJsonValue& id, const QString& msg) {
   return QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", id}, {"error", QJsonObject{{"code", -32000}, {"message", msg}}}})
       .toJson(QJsonDocument::Compact);
 }
-const char* kClosed = "Deepwater is not open on this computer, or \"Claude outside Deepwater\" is off (AI › LLM › Integration). "
+const char* kClosed = "Deepwater is not open on this computer, or Claude's access is off (Options > Claude). "
                       "Open Deepwater, then reconnect this MCP server (/mcp in Claude Code; restart Claude Desktop).";
 
 // one HTTP POST to the app; false when it could not be reached
@@ -77,7 +77,7 @@ bool wanted(int argc, char** argv) {
 }
 
 int run(int argc, char** argv) {
-  QCoreApplication app(argc, argv);   // names set by main() before: the same data folder as the app
+  QCoreApplication app(argc, argv);   // names set by main() before: the same settings as the app
 #ifdef Q_OS_WIN
   // one JSON message per line, "\n" only: text mode would write "\r\n" and stop reading at a Ctrl-Z byte
   _setmode(_fileno(stdin), _O_BINARY);
@@ -100,7 +100,7 @@ int run(int argc, char** argv) {
   }
   return 0;
 }
-QString program() { return QCoreApplication::applicationFilePath(); }
+QString program() { return QDir::toNativeSeparators(QCoreApplication::applicationFilePath()); }
 
 bool inClaudeCode() {
   QFile f(QDir::homePath() + "/.claude.json");
@@ -152,8 +152,15 @@ QString claudeDesktopConfig() {
   const QString dir = QDir::homePath() + "/Library/Application Support/Claude";
   if (!QFileInfo::exists(dir) && !QFileInfo::exists("/Applications/Claude.app")) return {};
 #elif defined(Q_OS_WIN)
-  const QString dir = qEnvironmentVariable("APPDATA") + "/Claude";
-  if (!QFileInfo::exists(dir)) return {};
+  QString dir;
+  const QDir packages(qEnvironmentVariable("LOCALAPPDATA") + "/Packages");
+  const QStringList claude = packages.entryList({"Claude_*"}, QDir::Dirs | QDir::NoDotAndDotDot);
+  if (!claude.isEmpty()) {
+    dir = packages.filePath(claude.first()) + "/LocalCache/Roaming/Claude";   // the packaged app's own %APPDATA%\Claude
+  } else {
+    dir = qEnvironmentVariable("APPDATA") + "/Claude";
+    if (!QFileInfo::exists(dir)) return {};
+  }
 #else
   const QString dir = QDir::homePath() + "/.config/Claude";
   if (!QFileInfo::exists(dir)) return {};

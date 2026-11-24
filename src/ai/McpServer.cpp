@@ -1,15 +1,12 @@
 #include "ai/McpServer.h"
-#include "ai/Blind.h"
-#include "core/Paths.h"
-#include "ai/Engine.h"
-#include "core/Paths.h"
-#include "ai/Slots.h"
 #include "ai/Tools.h"
+#include "core/Paths.h"
 #include "core/Settings.h"
+#include <QCoreApplication>
 #include <QDateTime>
-#include <QFileInfo>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -18,12 +15,13 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
-#include <QCoreApplication>
 #include <memory>
 
 namespace ai {
 namespace {
 constexpr int kMaxRequest = 1 << 20;   // 1 MB: a JSON-RPC request is a few hundred bytes
+const QStringList kSkills{"read_data"};
+const char* const kJournalTool = "get_track_record";   // the user's own trading journal: left out unless switched on
 QString randomToken() {
   QByteArray b(32, Qt::Uninitialized);
   QRandomGenerator::system()->fillRange(reinterpret_cast<quint32*>(b.data()), 8);
@@ -40,19 +38,29 @@ QByteArray rpcError(const QJsonValue& id, int code, const QString& msg) {
 
 McpServer& McpServer::instance() { static McpServer* s = new McpServer; return *s; }
 
-McpServer::McpServer() {
-  for (int i = 0; i < Slots::kCount; ++i) m_tokens << randomToken();
-  m_extToken = randomToken();
+McpServer::McpServer() { m_extToken = randomToken(); }
+
+QString McpServer::connectionFile() {
+  const QByteArray prof = qgetenv("DW_PROFILE");
+  const QString base = !prof.isEmpty() ? QString::fromUtf8(prof) : QDir::homePath() + "/.deepwater-mark4";
+  return base + "/mcp/connection.json";
 }
 
-// ------------------------------------------------------------------------------------------------ outside clients
-static const QStringList kExtSkills{"read_data"};
-
-QString McpServer::connectionFile() { return paths::data("mcp") + "/connection.json"; }
 bool McpServer::externalEnabled() const { return settings::value("ai.mcp.external", false).toBool(); }
+bool McpServer::journalIncluded() const { return settings::value("ai.mcp.journal", false).toBool(); }
+
+void McpServer::setJournalIncluded(bool on) {
+  settings::setValue("ai.mcp.journal", on);
+  emit externalChanged();
+}
+
+bool McpServer::offered(const QString& toolName) const {
+  return toolName != QLatin1String(kJournalTool) || journalIncluded();
+}
 
 bool McpServer::writeConnection() {
   const QString path = connectionFile();
+  QDir().mkpath(QFileInfo(path).absolutePath());
   paths::dropLink(path);
   QSaveFile f(path);
   if (!f.open(QIODevice::WriteOnly)) return false;
@@ -64,7 +72,7 @@ bool McpServer::writeConnection() {
 }
 
 void McpServer::startExternal() {
-  if (!externalEnabled()) { QFile::remove(connectionFile()); return; }
+  if (!externalEnabled()) { QFile::remove(connectionFile()); emit externalChanged(); return; }
   if (listen()) writeConnection();
   emit externalChanged();
 }
@@ -97,24 +105,6 @@ bool McpServer::listen() {
   return m_srv->listen(QHostAddress::LocalHost, 0);
 }
 
-QString McpServer::writeConfig(int env) {
-  if (env < 0 || env >= Slots::kCount || !listen()) return {};
-  const QString dir = Slots::instance().folder(env);
-  QDir().mkpath(dir);
-  const QJsonObject cfg{{"mcpServers", QJsonObject{{"deepwater", QJsonObject{
-      {"type", "http"},
-      {"url", QString("http://127.0.0.1:%1/mcp/%2").arg(port()).arg(env + 1)},
-      {"headers", QJsonObject{{"Authorization", "Bearer " + m_tokens[env]}}}}}}}};
-  const QString path = dir + "/mcp.json";
-  paths::dropLink(path);   // QSaveFile writes through a link: the token must not land elsewhere
-  QSaveFile f(path);
-  if (!f.open(QIODevice::WriteOnly)) return {};
-  f.write(QJsonDocument(cfg).toJson());
-  if (!f.commit()) return {};
-  QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-  return path;
-}
-
 void McpServer::onReadable(QTcpSocket* s) {
   QByteArray& b = m_buf[s];
   b += s->readAll();
@@ -130,7 +120,7 @@ void McpServer::onReadable(QTcpSocket* s) {
     }
     const int len = h.value("content-length", "0").toInt();
     if (len < 0 || len > kMaxRequest || req.size() < 2) { s->abort(); return; }
-    // the head decides: a request without the token is refused before its body is buffered (up to 1 MB each)
+    // the head decides: a request without the key is refused before its body is buffered (up to 1 MB each)
     if (const int code = gate(req[1], h)) {
       reply(s, code, {});
       b.clear();
@@ -155,33 +145,21 @@ void McpServer::reply(QTcpSocket* s, int code, const QByteArray& body, const QBy
 }
 
 int McpServer::gate(const QByteArray& path, const QHash<QByteArray, QByteArray>& h) const {
-  // only local programs that hold the token: no browser page (Origin), no DNS-rebound host name
+  // only local programs that hold the key: no browser page (Origin), no DNS-rebound host name
   const QByteArray hostPort = h.value("host");
   const QByteArray host = hostPort.left(hostPort.indexOf(':') < 0 ? hostPort.size() : hostPort.indexOf(':'));
   if (h.contains("origin") || (host != "127.0.0.1" && host != "localhost")) return 403;
-  if (!path.startsWith("/mcp/")) return 404;
-  if (path == "/mcp/ext") {
-    if (!externalEnabled()) return 404;
-    const QByteArray want = "Bearer " + m_extToken.toLatin1(), got = h.value("authorization");
-    unsigned char diff = got.size() == want.size() ? 0 : 1;
-    for (int i = 0; i < want.size(); ++i) diff |= static_cast<unsigned char>(want[i] ^ (i < got.size() ? got[i] : 0));
-    return diff ? 401 : 0;
-  }
-  const int env = path.mid(5).toInt() - 1;
-  if (env < 0 || env >= Slots::kCount) return 404;
-  // compared in constant time: how long a wrong token takes to refuse must not tell how much of it was right
-  const QByteArray want = "Bearer " + m_tokens[env].toLatin1(), got = h.value("authorization");
+  if (path != "/mcp/ext" || !externalEnabled()) return 404;
+  // compared in constant time: how long a wrong key takes to refuse must not tell how much of it was right
+  const QByteArray want = "Bearer " + m_extToken.toLatin1(), got = h.value("authorization");
   unsigned char diff = got.size() == want.size() ? 0 : 1;
   for (int i = 0; i < want.size(); ++i) diff |= static_cast<unsigned char>(want[i] ^ (i < got.size() ? got[i] : 0));
-  if (m_tokens[env].isEmpty() || diff) return 401;
-  return 0;
+  return diff ? 401 : 0;
 }
 
 void McpServer::handle(QTcpSocket* s, const QByteArray& method, const QByteArray& path,
                        const QHash<QByteArray, QByteArray>& h, const QByteArray& body) {
   if (const int code = gate(path, h)) { reply(s, code, {}); return; }
-  const bool ext = path == "/mcp/ext";
-  const int env = ext ? -1 : path.mid(5).toInt() - 1;
   if (method == "DELETE") { reply(s, 200, {}); return; }
   if (method != "POST") { reply(s, 405, {}, "Allow: POST, DELETE\r\n"); return; }
 
@@ -200,68 +178,24 @@ void McpServer::handle(QTcpSocket* s, const QByteArray& method, const QByteArray
         {"protocolVersion", v.isEmpty() ? QStringLiteral("2025-06-18") : v},
         {"capabilities", QJsonObject{{"tools", QJsonObject{{"listChanged", false}}}}},
         {"serverInfo", QJsonObject{{"name", "deepwater"}, {"version", "1.0"}}},
-        {"instructions", ext ? "Deepwater's data, as the trading terminal open on this computer shows it (markets, news, calendar, economy, "
-                               "positioning…). Quote figures as the tools give them, with their time; never invent a missing one."
-                             : "Deepwater's data, as the trading terminal shows it. Only the tools this environment's skills grant."}}));
+        {"instructions", QString("Deepwater's data, as the trading terminal open on this computer shows it (markets, news, calendar, "
+                                 "economy, positioning…). Read only. Quote figures as the tools give them, with their time; never "
+                                 "invent a missing one. ") + kExternalRule}}));
     return;
   }
   if (m == "ping") { reply(s, 200, rpcResult(id, {})); return; }
   if (m == "tools/list") {
     QJsonArray tools;
-    for (const auto& t : Tools::instance().forSkills(ext ? kExtSkills : Slots::instance().skills(env)))
-      tools.append(QJsonObject{{"name", t.name}, {"description", t.description}, {"inputSchema", t.parameters}});
+    for (const auto& t : Tools::instance().forSkills(kSkills))
+      if (offered(t.name)) tools.append(QJsonObject{{"name", t.name}, {"description", t.description}, {"inputSchema", t.parameters}});
     reply(s, 200, rpcResult(id, QJsonObject{{"tools", tools}}));
     return;
   }
-  if (m == "tools/call" && ext) { handleExternalCall(s, id, params); return; }
-  if (m == "tools/call") {
-    const QString name = params.value("name").toString();
-    const QJsonObject args = params.value("arguments").toObject();
-    const QJsonObject call{{"name", name}, {"arguments", args}};
-    QPointer<QTcpSocket> sock(s);
-    const blind::Mask mask = maskFor(env);   // blind trials: dates, the market's name and price level masked both ways
-    auto answer = [this, sock, id, env, call, mask](const ToolResult& r0) {
-      const ToolResult r{r0.ok, blind::out(mask, r0.text)};
-      if (Engine* e = Engines::instance().at(env)) e->recordTool(call, r);
-      reply(sock, 200, rpcResult(id, QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", r.text}}}},
-                                                 {"isError", !r.ok}}));
-    };
-    // a call refused before it runs is answered without a "TOOL" line in the conversation (anything holding the token
-    // could otherwise write lines there)
-    auto refuse = [this, sock, id](const QString& why) {
-      reply(sock, 200, rpcResult(id, QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", why}}}}, {"isError", true}}));
-    };
-    Engine* e = Engines::instance().at(env);
-    const QString toolGate = e ? e->toolGate() : QStringLiteral("refused: no such environment");
-    const ToolDef* tool = Tools::instance().find(name);
-    if (!toolGate.isEmpty()) { refuse(toolGate); return; }
-    if (!tool) { refuse("error: there is no tool named \"" + name + "\""); return; }
-    if (!Slots::instance().hasSkill(env, tool->skill)) {
-      refuse("refused: this environment does not grant the skill \"" + tool->skill + "\" any more");
-      return;
-    }
-    // the evaluation clock: a tool that only knows the present is refused, and the refusal is journaled
-    const qint64 asOf = Slots::instance().asOf(env);
-    if (const QString why = clockGate(*tool, asOf); !why.isEmpty()) { answer({false, why}); return; }
-    auto once = std::make_shared<bool>(false);
-    auto guarded = [answer, once, tool](const ToolResult& r) {
-      if (*once) return;
-      *once = true;
-      answer({r.ok, r.ok ? wrapExternal(*tool, r.text) : r.text});   // third parties' text marked as data
-    };
-    const int ms = tool->timeoutMs;
-    QTimer::singleShot(ms, this, [guarded, ms] {
-      guarded({false, QString("error: the data did not arrive within %1 s").arg(ms / 1000)});
-    });
-    currentCaller() = ToolCaller{env, QStringLiteral("Claude Code"), asOf};
-    e->beginTool(call);
-    tool->run(blind::in(mask, args), guarded);
-    return;
-  }
+  if (m == "tools/call") { handleCall(s, id, params); return; }
   reply(s, 200, rpcError(id, -32601, "method not found: " + m));
 }
 
-void McpServer::handleExternalCall(QTcpSocket* s, const QJsonValue& id, const QJsonObject& params) {
+void McpServer::handleCall(QTcpSocket* s, const QJsonValue& id, const QJsonObject& params) {
   const QString name = params.value("name").toString();
   const QJsonObject args = params.value("arguments").toObject();
   QPointer<QTcpSocket> sock(s);
@@ -269,7 +203,7 @@ void McpServer::handleExternalCall(QTcpSocket* s, const QJsonValue& id, const QJ
     reply(sock, 200, rpcResult(id, QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", text}}}}, {"isError", !ok}}));
   };
   const ToolDef* tool = Tools::instance().find(name);
-  if (!tool || !kExtSkills.contains(tool->skill)) { send(false, "error: there is no tool named \"" + name + "\""); return; }
+  if (!tool || !kSkills.contains(tool->skill) || !offered(name)) { send(false, "error: there is no tool named \"" + name + "\""); return; }
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
   while (!m_extTimes.isEmpty() && now - m_extTimes.first() > 60000) m_extTimes.removeFirst();
   if (m_extTimes.size() >= kExtPerMinute) {
@@ -294,11 +228,10 @@ void McpServer::handleExternalCall(QTcpSocket* s, const QJsonValue& id, const QJ
     if (*once) return;
     *once = true;
     journal(r.ok, int(r.text.size()));
-    send(r.ok, r.ok ? wrapExternal(t, r.text) : r.text);
+    send(r.ok, r.ok ? wrapExternal(t, r.text) : r.text);   // third parties' text marked as data
   };
   const int ms = tool->timeoutMs;
   QTimer::singleShot(ms, this, [guarded, ms] { guarded({false, QString("error: the data did not arrive within %1 s").arg(ms / 1000)}); });
-  currentCaller() = ToolCaller{-1, QStringLiteral("Claude (outside Deepwater)"), 0};
   tool->run(args, guarded);
 }
 }  // namespace ai

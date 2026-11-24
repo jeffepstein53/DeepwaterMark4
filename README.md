@@ -28,6 +28,16 @@ Deepwater Mark 4 cherche lui-même, à chaque lancement, les nouvelles versions 
 
 Vos réglages et vos données ne sont pas dans le dossier du programme. Ils restent tels quels.
 
+## Laisser Claude lire Deepwater
+
+Deepwater Mark 4 peut servir ses données à Claude Code et à Claude Desktop (protocole MCP), en lecture seule : jamais un ordre, jamais vos clés ni vos mots de passe.
+
+1. Ouvrez les Options (l'engrenage), section **CLAUDE**.
+2. Allumez « Laisser Claude lire les données de Deepwater ». C'est éteint par défaut.
+3. Cliquez sur « Ajouter à Claude Code » ou « Ajouter à Claude Desktop », puis relancez Claude.
+
+Deepwater doit rester ouvert pour que Claude reçoive des réponses. Tout se passe sur votre PC : le serveur n'écoute que sur `127.0.0.1`, avec une clé neuve à chaque lancement, au plus 30 appels par minute, et un journal des appels (outil et arguments, jamais les données) dans le dossier de données, `mcp\journal.jsonl`. Votre journal de trading est exclu, sauf si vous allumez « Inclure mon journal de trading ». Ce que Claude lit est envoyé à Anthropic. Les textes de tiers (actualités, fil Squawk, notes de banques) sont marqués comme des données, pas comme des consignes.
+
 ## Où sont vos données
 
 - **Données** (calendriers enregistrés, notes des banques, données macro et techniques…) : `%APPDATA%\deepwater-terminal-corrige\Deepwater`

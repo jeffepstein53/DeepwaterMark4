@@ -14,6 +14,12 @@
 #include <QMainWindow>
 #include <QScrollBar>
 #include <cmath>
+#include <QPointer>
+#ifndef Q_OS_IOS
+#define DW_CLAUDE 1   // Options > Claude: the MCP server for Claude Code and Claude Desktop (desktop builds)
+#include "ai/McpBridge.h"
+#include "ai/McpServer.h"
+#endif
 
 namespace options {
 namespace {
@@ -23,7 +29,7 @@ QString otr(const char* s) { return QCoreApplication::translate("options", s); }
 // The dialog's content, painted: title row, language, themes, footer. Lays itself out for its width (narrow: a phone).
 class Body : public QWidget {
 public:
-  explicit Body(QWidget* parent) : QWidget(parent) { setMouseTracking(true); }
+  explicit Body(QWidget* parent) : QWidget(parent) { setMouseTracking(true); refreshClaude(); }
   int heightFor(int w) const { return layout(w).height; }
 protected:
   void paintEvent(QPaintEvent*) override;
@@ -32,14 +38,14 @@ protected:
   void mouseReleaseEvent(QMouseEvent*) override { m_dragging = false; }
   void leaveEvent(QEvent*) override { if (m_hover != None) { m_hover = None; update(); } }
 private:
-  enum Hit { None, Close, LangEn, LangFr, Restart, ZoomFirst = 50, ThemeFirst = 100 };
+  enum Hit { None, Close, LangEn, LangFr, Restart, McpToggle = 40, McpJournal, McpCode, McpDesktop, ZoomFirst = 50, ThemeFirst = 100 };
   struct Area { QRectF r; int id; };
   struct Layout {
     bool narrow = false;
     qreal pad = 26;
     QRectF close, langHint, themeHint, footer;
-    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0;
-    QRectF zoomHint;
+    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0, claudeLabelY = 0;
+    QRectF zoomHint, claudeHint, claudeNote;
     QList<Area> areas;
     int height = 0;
   };
@@ -50,6 +56,17 @@ private:
   }
   int m_hover = None;
   QPointF m_dragFrom; bool m_dragging = false;
+  bool m_inCode = false, m_inDesktop = false;   // Deepwater declared to Claude Code / Claude Desktop (read when the dialog opens)
+  QString m_claudeNote;                          // the last answer: done, or what went wrong
+  void refreshClaude() {
+#ifdef DW_CLAUDE
+    m_inCode = ai::mcpbridge::inClaudeCode();
+    m_inDesktop = ai::mcpbridge::inClaudeDesktop();
+#endif
+  }
+  static QString claudeHintText() {
+    return otr("Claude Code and Claude Desktop can read what Deepwater's pages show (read only, never an order), while Deepwater is open. What Claude reads is sent to Anthropic.");
+  }
   static QString zoomHintText() {
     return zoom::saved() == zoom::active()
                ? otr("Size of the whole interface. A new zoom applies when Deepwater restarts (Cmd+= / Cmd+- / Cmd+0).")
@@ -98,6 +115,24 @@ Body::Layout Body::layout(int w) const {
   for (int i = 0; i < themes.size(); ++i)
     L.areas << Area{QRectF(pad + (i % 2) * (half + 10), y + (i / 2) * (ch + 8), half, ch), ThemeFirst + i};
   y += ((themes.size() + 1) / 2) * (ch + 8) - 8;
+#ifdef DW_CLAUDE
+  // Claude: two switches, then one button for each client
+  y += 38;
+  L.claudeLabelY = y;
+  const qreal clh = std::max<qreal>(22, hintH(claudeHintText()));
+  L.claudeHint = QRectF(pad, y + 6, inner, clh);
+  y = L.claudeHint.bottom() + 6;
+  L.areas << Area{QRectF(pad, y, inner, 46), McpToggle};
+  y += 46 + 8;
+  L.areas << Area{QRectF(pad, y, inner, 46), McpJournal};
+  y += 46 + 8;
+  L.areas << Area{QRectF(pad, y, half, 46), McpCode} << Area{QRectF(pad + half + 10, y, half, 46), McpDesktop};
+  y += 46;
+  if (!m_claudeNote.isEmpty()) {
+    L.claudeNote = QRectF(pad, y + 8, inner, std::max<qreal>(22, hintH(m_claudeNote)));
+    y = L.claudeNote.bottom();
+  }
+#endif
   // footer
   const QFontMetricsF ff(theme::mono(10, QFont::Normal, 1.0));
   const qreal fh2 = std::ceil(ff.boundingRect(QRectF(0, 0, inner, 200), Qt::TextWordWrap, otr("Changes apply immediately and are saved.  Esc closes.")).height());
@@ -215,6 +250,42 @@ void Body::paintEvent(QPaintEvent*) {
     }
   }
 
+#ifdef DW_CLAUDE
+  // Claude
+  section(L.claudeLabelY, otr("CLAUDE"), L.claudeHint, claudeHintText());
+  auto& mcp = ai::McpServer::instance();
+  auto toggle = [&](const Area& a, const QString& text, bool on) {
+    const bool hov = a.id == m_hover;
+    p.setPen(QPen(on ? c.accent : hov ? c.borderHi : c.border, 1));
+    p.setBrush(on ? c.accentDim : hov ? c.panelAlt : theme::map("#0e0a05"));
+    p.drawRoundedRect(a.r.adjusted(.5, .5, -.5, -.5), 3, 3);
+    const qreal in = L.narrow ? 12 : 16;
+    p.setFont(theme::mono(L.narrow ? 11 : 12, QFont::Bold, 1.0)); p.setPen(on ? c.accent : hov ? c.text : c.textDim);
+    p.drawText(a.r.adjusted(in, 0, -(in + 44), 0), Qt::AlignVCenter | Qt::AlignLeft,
+               QFontMetricsF(p.font()).elidedText(text, Qt::ElideRight, a.r.width() - 2 * in - 44));
+    p.setFont(theme::mono(10, QFont::Medium, 1.5)); p.setPen(on ? theme::alpha(c.accent, 200) : c.textMute);
+    p.drawText(a.r.adjusted(0, 0, -in, 0), Qt::AlignVCenter | Qt::AlignRight, on ? otr("ON") : otr("OFF"));
+  };
+  for (const auto& a : L.areas) {
+    if (a.id == McpToggle) toggle(a, otr("Let Claude read Deepwater's data"), mcp.externalEnabled());
+    else if (a.id == McpJournal) toggle(a, otr("Include my trading journal"), mcp.journalIncluded());
+    else if (a.id == McpCode || a.id == McpDesktop) {
+      const bool code = a.id == McpCode, added = code ? m_inCode : m_inDesktop, hov = a.id == m_hover;
+      p.setPen(QPen(added ? c.accent : hov ? c.borderHi : c.border, 1));
+      p.setBrush(added ? c.accentDim : hov ? c.panelAlt : theme::map("#0e0a05"));
+      p.drawRoundedRect(a.r.adjusted(.5, .5, -.5, -.5), 3, 3);
+      p.setFont(theme::mono(L.narrow ? 10 : 11, QFont::Bold, 1.0)); p.setPen(added ? c.accent : hov ? c.text : c.textDim);
+      const QString t = code ? (added ? otr("REMOVE FROM CLAUDE CODE") : otr("ADD TO CLAUDE CODE"))
+                             : (added ? otr("REMOVE FROM CLAUDE DESKTOP") : otr("ADD TO CLAUDE DESKTOP"));
+      p.drawText(a.r.adjusted(8, 0, -8, 0), Qt::AlignCenter, QFontMetricsF(p.font()).elidedText(t, Qt::ElideRight, a.r.width() - 16));
+    }
+  }
+  if (!m_claudeNote.isEmpty()) {
+    p.setFont(theme::sans(12)); p.setPen(c.textDim);
+    p.drawText(L.claudeNote, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, m_claudeNote);
+  }
+#endif
+
   // footer
   p.setFont(theme::mono(10, QFont::Normal, 1.0)); p.setPen(c.textFaint);
   p.drawText(L.footer, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, otr("Changes apply immediately and are saved.  Esc closes."));
@@ -236,6 +307,32 @@ void Body::mousePressEvent(QMouseEvent* e) {
   if (h == LangEn) i18n::setLanguage(i18n::Lang::English);
   else if (h == LangFr) i18n::setLanguage(i18n::Lang::French);
   else if (h == Restart) zoom::restart();
+#ifdef DW_CLAUDE
+  else if (h == McpToggle) ai::McpServer::instance().setExternalEnabled(!ai::McpServer::instance().externalEnabled());
+  else if (h == McpJournal) ai::McpServer::instance().setJournalIncluded(!ai::McpServer::instance().journalIncluded());
+  else if (h == McpDesktop) {
+    QString err;
+    const bool want = !m_inDesktop;
+    m_claudeNote = ai::mcpbridge::setInClaudeDesktop(want, &err)
+                       ? (want ? otr("Added to Claude Desktop. Restart Claude Desktop, and keep Deepwater open.") : otr("Removed from Claude Desktop."))
+                       : err;
+    refreshClaude();
+    if (auto* d = qobject_cast<OptionsDialog*>(window())) d->fit();
+  }
+  else if (h == McpCode) {
+    const bool want = !m_inCode;
+    m_claudeNote = otr("Working…");
+    QPointer<Body> self(this);
+    ai::mcpbridge::setInClaudeCode(want, [self, want](bool ok, QString err) {
+      if (!self) return;
+      self->m_claudeNote = ok ? (want ? otr("Added to Claude Code. Restart Claude Code, then check with /mcp.") : otr("Removed from Claude Code.")) : err;
+      self->refreshClaude();
+      if (auto* d = qobject_cast<OptionsDialog*>(self->window())) d->fit();
+      self->update();
+    });
+    if (auto* d = qobject_cast<OptionsDialog*>(window())) d->fit();
+  }
+#endif
   else if (h >= ZoomFirst && h < ThemeFirst) {
     // the choice is saved here; the button under the row restarts (no question while the dialog is open)
     settings::setValue("ui.zoom", zoom::levels()[h - ZoomFirst]);

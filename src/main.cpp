@@ -14,6 +14,11 @@
 #include "app/HelpWindow.h"
 #include "app/Zoom.h"
 #include "app/Updater.h"
+#include "ai/McpBridge.h"
+#include "ai/McpServer.h"
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSurfaceFormat>
 #include <QScreen>
 #include <QDir>
@@ -54,6 +59,9 @@ int main(int argc, char** argv) {
   QCoreApplication::setOrganizationName(QStringLiteral(DW_ORGANIZATION));   // CMakeLists.txt DW_ORGANIZATION
   QCoreApplication::setOrganizationDomain("deepwater-terminal.com");
   QCoreApplication::setApplicationName("Deepwater");
+#ifndef Q_OS_IOS
+  if (ai::mcpbridge::wanted(argc, argv)) return ai::mcpbridge::run(argc, argv);   // started by Claude: no window
+#endif
   zoom::installSaved();
   QApplication app(argc, argv);
   dw::runStartupFunctions();   // iOS: the services Qt could not start inside the constructor (core/Startup.h)
@@ -94,6 +102,17 @@ int main(int argc, char** argv) {
   if (cli.isSet("options")) QTimer::singleShot(300, &w, [&w] { w.showOptions(); });
   // updates (app/Updater): the launch check and the release WebSocket; not during the audits, which measure pages
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) app::Updater::instance().start();
+#ifndef Q_OS_IOS
+  // Claude (Options > Claude): served while the app runs, when switched on
+  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) {
+    ai::McpServer::instance().startExternal();
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [] {   // only this instance's file (another one may be open)
+      QFile f(ai::McpServer::connectionFile());
+      if (f.open(QIODevice::ReadOnly) && QJsonDocument::fromJson(f.readAll()).object().value("pid").toInteger() == QCoreApplication::applicationPid())
+        f.remove();
+    });
+  }
+#endif
   if (cli.isSet("updates")) QTimer::singleShot(300, &w, [&w] { w.showUpdates(); });
   if (cli.isSet("help-page"))
     QTimer::singleShot(300, &w, [&w, v = cli.value("help-page"), q = cli.value("help-search")] {

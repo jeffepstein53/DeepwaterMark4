@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Deepwater VERSION 0.4.0 LANGUAGES CXX)
+project(Deepwater VERSION 0.4.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,9 +30,11 @@ endif()
 file(GLOB_RECURSE DW_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
 # Deepwater Mark 4 has neither the Charts tab nor the AI tab (removed 2026-11-24; their code is in the repository's history).
 # What other pages need from them stays: src/charts/core and four files of src/charts/data (Data › Technical data's
-# indicators, footprints and Binance streams). src/ai holds the former MCP server and its data tools, the base of Mark 4's
-# own MCP: not built yet.
-list(FILTER DW_SOURCES EXCLUDE REGEX "/src/ai/")
+# indicators, footprints and Binance streams). src/ai is Mark 4's MCP server for Claude (Options > Claude): its data tools,
+# read only, and the bridge `Deepwater --mcp-stdio` that Claude Code and Claude Desktop start. Desktop builds only.
+if(IOS)
+  list(FILTER DW_SOURCES EXCLUDE REGEX "/src/ai/")
+endif()
 if(APPLE)
   file(GLOB_RECURSE DW_OBJC CONFIGURE_DEPENDS src/*.mm)
   if(IOS)
