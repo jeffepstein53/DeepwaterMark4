@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "deepwater": {
+      "command": "cmd",
+      "args": ["/c", "${CLAUDE_PLUGIN_ROOT}\\scripts\\deepwater-mcp.cmd"]
+    }
+  }
+}

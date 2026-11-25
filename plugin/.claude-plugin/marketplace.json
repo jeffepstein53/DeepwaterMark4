@@ -1,0 +1,16 @@
+{
+  "name": "deepwater-local",
+  "owner": {
+    "name": "Deepwater Mark 4"
+  },
+  "metadata": {
+    "description": "Deepwater Mark 4's plugin for Claude, installed from this folder."
+  },
+  "plugins": [
+    {
+      "name": "deepwater",
+      "source": "./deepwater",
+      "description": "Lets Claude read the data of Deepwater Mark 4 (read only): markets, news, calendar, economy, positioning."
+    }
+  ]
+}

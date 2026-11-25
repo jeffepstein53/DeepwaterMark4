@@ -1,0 +1,11 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "deepwater",
+  "version": "0.1.0",
+  "description": "Lets Claude read the data of Deepwater Mark 4 (markets, news, calendar, economy, positioning), read only. Deepwater Mark 4 must be installed and open on this computer, with Options > CLAUDE switched on.",
+  "author": {
+    "name": "Deepwater Mark 4"
+  },
+  "homepage": "https://github.com/jeffepstein53/DeepwaterMark4",
+  "license": "AGPL-3.0"
+}
