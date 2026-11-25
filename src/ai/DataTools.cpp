@@ -19,6 +19,7 @@
 #include "account/Journal.h"
 #include "account/Stats.h"
 #include "analytics/Liquidity.h"
+#include "app/Watchdog.h"
 #include "analytics/Technical.h"
 #include "banks/Forecasts.h"
 #include "banks/Registry.h"
@@ -26,6 +27,7 @@
 #include "fundamental/Fundamental.h"
 #include "global/Sessions.h"
 #include "macro/CentralBanks.h"
+#include "macro/KeyFigures.h"
 #include "macro/MacroStore.h"
 #include "market/Candles.h"
 #include "market/Instruments.h"
@@ -272,6 +274,11 @@ void calendar(const QJsonObject& a, ToolDone done) {
         out += (e.allDay ? QString("all day") : e.time.toUTC().toString("HH:mm") + " UTC") + " | " + e.currency + " | " +
                impactText(e.impact) + " | " + e.title + " | " + (e.actual.has() ? e.actual.text : e.time > nowUtc ? "not released yet" : "not read (released, no source gave the figure)") + " | " +
                (e.forecast.has() ? e.forecast.text : "none") + " | " + (e.previous.has() ? e.previous.text : "none") + "\n";
+        if (!e.other.isEmpty()) out += "    sources disagree on the actual: " + e.actualSource + " " + e.actual.text + ", " + e.other + "\n";
+        if (e.revised.has()) out += "    previous revised to " + e.revised.text + " (" + e.revisedSource + ")\n";
+        for (const auto& d : e.details)
+          out += "    same release: " + d.name + " " + d.actual + (d.forecast.isEmpty() ? "" : ", forecast " + d.forecast) +
+                 (d.previous.isEmpty() ? "" : ", previous " + d.previous) + (d.revised.isEmpty() ? "" : ", revised " + d.revised) + " (" + d.source + ")\n";
         ++n;
       }
     }
@@ -351,7 +358,7 @@ void macroData(const QJsonObject& a, ToolDone done) {
   store.ensureLoaded();
   auto answer = [=] {
     auto& st = macro::MacroStore::instance();
-    QString out = "Macro data for " + iso + " (official series: BIS, OECD, World Bank, central banks)\n";
+    QString out = "Macro data for " + iso + " (official series: national statistics offices, BIS, OECD, World Bank, central banks; each with the period it measures)\n";
     int found = 0;
     for (int k = 0; k < int(macro::Ind::Count); ++k) {
       const auto ind = macro::Ind(k);
@@ -377,8 +384,51 @@ void macroData(const QJsonObject& a, ToolDone done) {
   };
   waitUntil(&store, &macro::MacroStore::updated, [iso] {
     auto& st = macro::MacroStore::instance();
-    return !st.loading() || (st.series(iso, macro::Ind::Inflation).ok() && st.series(iso, macro::Ind::Unemployment).ok());
+    return !st.loading() || (!st.nationalLoading(iso) && st.series(iso, macro::Ind::Inflation).ok() && st.series(iso, macro::Ind::Unemployment).ok());
   }, 20000, answer);
+}
+
+// The other sources' figures beside one of ours, in English: " | check: …".
+QString checkText(const macro::check::Item* it) {
+  if (!it) return {};
+  using V = macro::check::Verdict;
+  QStringList o;
+  for (const auto& r : it->others) {
+    QString t = r.source + " " + macro::check::figureText(*it, r.value);
+    if (r.period != it->period && it->freq != 'D') t += " for " + macro::formatPeriod(r.period, it->freq);
+    if (!r.note.isEmpty()) t += " (" + r.note + ")";
+    if (!r.judged) t += " [shown, not compared]";
+    if (!o.contains(t)) o << t;
+  }
+  const char* v = it->verdict == V::Agree ? "confirmed by a second source" : it->verdict == V::Differ ? "TWO SOURCES DIFFER"
+                : it->verdict == V::Late ? "LATE: a newer figure has been published" : it->verdict == V::Missing ? "no figure" : "single source";
+  return QString::fromLatin1(v) + (o.isEmpty() ? QString() : "; others: " + o.join(", "));
+}
+
+void dataChecks(const QJsonObject& a, ToolDone done) {
+  const QString ccy = strArg(a, "currency").toUpper();
+  auto& k = macro::KeyFigures::instance();
+  k.start();
+  auto answer = [ccy, done] {
+    auto& k = macro::KeyFigures::instance();
+    k.recompute();
+    const auto s = k.summary();
+    QString out = QString("Deepwater data check: %1 key figures, %2 confirmed by a second source, %3 different, %4 late, %5 missing, %6 with a single source\n")
+                      .arg(s.figures).arg(s.agree).arg(s.differ).arg(s.late).arg(s.missing).arg(s.alone);
+    const auto issues = app::Watchdog::instance().issues();
+    out += issues.isEmpty() ? QString("No issue now.\n") : QString("Issues now:\n");
+    for (const auto& i : issues) out += "- " + i.title + ": " + i.detail + " (seen since " + utc(i.since) + ")\n";
+    for (const auto& it : k.items()) {
+      if (!ccy.isEmpty() && it.ccy != ccy) continue;
+      out += it.ccy + " | " + it.figure + " | " + macro::check::figureText(it, it.value) + (it.freq != 'D' ? " " + macro::formatPeriod(it.period, it.freq) : QString()) +
+             (it.source.isEmpty() ? QString() : " (" + it.source + ")") + " | " + checkText(&it) + "\n";
+    }
+    if (!app::Watchdog::instance().started()) out += "(just launched: the check starts 20 s after launch)\n";
+    done(okText(out));
+  };
+  auto& store = macro::MacroStore::instance();
+  store.ensureLoaded();
+  waitUntil(&store, &macro::MacroStore::updated, [] { return !macro::MacroStore::instance().loading(); }, 15000, answer);
 }
 
 void centralBanks(const QJsonObject& a, ToolDone done) {
@@ -396,8 +446,12 @@ void centralBanks(const QJsonObject& a, ToolDone done) {
              (b.rateAsOf.isValid() ? " as of " + b.rateAsOf.toString(Qt::ISODate) : QString()) + " | next meeting " + (next.decision.isValid() ? next.decision.toString(Qt::ISODate) : "n/a");
       if (o.valid()) out += " | odds cut " + num(o.cut() * 100, 0) + "% hold " + num(o.hold * 100, 0) + "% hike " + num(o.hike() * 100, 0) +
                             "% | implied " + num(b.impliedBp, 1) + " bp | bias " + b.bias() +
-                             (b.pricedAt.isValid() ? " | odds computed " + ageText(b.pricedAt.toUTC()) : QString());
+                             (b.pricedAt.isValid() ? (b.id == "RBA" || b.id == "RBNZ" ? " | odds published " : " | odds computed ") + ageText(b.pricedAt.toUTC()) : QString()) +
+                             (b.pricedDay.isValid() ? " from the market data of " + b.pricedDay.toString(Qt::ISODate) + " (published once a day)" : QString());
       else out += " | no market pricing" + (b.pricingNote.isEmpty() ? QString() : " (" + b.pricingNote + ")");
+      QStringList others;
+      for (const auto& x : c.otherOdds(b.id)) others << x.source + " " + num(x.bp, 1) + " bp (" + utc(x.at) + ")";
+      if (!others.isEmpty()) out += " | other sources for the next meeting: " + others.join(", ");
       out += "\n";
       if (!full) return;
       if (!b.path.isEmpty()) {
@@ -629,7 +683,8 @@ void fundamentals(const QJsonObject&, ToolDone done) {
   auto* src = fundamental::defaultSource(qApp);
   auto answer = [src, done] {
     if (!src->ready()) { src->deleteLater(); done(fail("fundamental scores still loading" + (src->status().isEmpty() ? QString() : ": " + src->status()))); return; }
-    const auto scores = fundamental::scoreAll(src->inputs());
+    const auto inputs = src->inputs();
+    const auto scores = fundamental::scoreAll(inputs);
     QString out = "Fundamental heatmap (scores computed by Deepwater from central-bank and macro series; rank 1 = strongest)\n"
                   "rank | currency | score | bias | rates | inflation | growth | labour | activity | sentiment\n";
     for (const auto& s : scores) {
@@ -637,6 +692,12 @@ void fundamentals(const QJsonObject&, ToolDone done) {
       for (int c = 0; c < fundamental::kColumns; ++c) row << s.sig[c].word + (s.sig[c].sub.isEmpty() ? "" : " (" + s.sig[c].sub + ")");
       out += row.join(" | ") + "\n";
     }
+    out += "Real policy rate (policy rate less CPI y/y; the difference between two currencies is the carry after inflation)\n"
+           "currency | policy rate | CPI y/y | real rate | core CPI y/y | real rate on core\n";
+    for (const auto& in : inputs)
+      out += in.ccy + " | " + num(in.policyRate) + "% | " + num(in.cpi.value, 1) + "% (" + in.cpi.period.toString("yyyy-MM") + ") | " +
+             num(fundamental::realRate(in)) + "% | " + num(in.coreCpi.value, 1) + "% (" + in.coreCpi.period.toString("yyyy-MM") + ") | " +
+             num(fundamental::realRate(in, true)) + "%\n";
     src->deleteLater();
     done(okText(out));
   };
@@ -1084,6 +1145,10 @@ void registerDataTools(Tools& t) {
                  {"indicator", str("optional: inflation, gdp, unemployment, policy rate, core, retail, confidence, yield…")}}, {"country"}), macroData});
   t.add({"get_central_banks", S, "Central banks: policy rate, next meeting, market odds of cut/hold/hike, implied path, recent decisions.",
          schema({{"bank", str("optional: FED, ECB, BOE, BOJ, SNB, RBA, RBNZ, BOC (or currency); empty = all")}}), centralBanks});
+  t.add({"get_data_checks", S, "Data check: every key figure (policy rate, CPI, core CPI, unemployment, GDP, next-meeting odds and date of the "
+                               "8 currencies) against the other sources that give it, with both values when they differ, and the sources that "
+                               "have stopped answering. Use it before relying on a figure.",
+         schema({{"currency", str("optional: one currency (USD); empty = all")}}), dataChecks});
   t.add({"get_cot", S, "CFTC Commitments of Traders: weekly net positions of each trader category in a futures market.",
          schema({{"market", str("e.g. EUR, USD, JPY, GOLD, OIL, ES, or an instrument like EURUSD")},
                  {"weeks", integer("default 6")}}, {"market"}), cot});

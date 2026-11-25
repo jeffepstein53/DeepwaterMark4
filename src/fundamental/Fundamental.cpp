@@ -95,7 +95,10 @@ static double typicalChange(const Release& r) {
   const double med = d[d.size() / 2];
   return med > 1e-9 ? 2.0 * med : 1.0;   // a change of twice the median move gives tanh(1) ≈ 0.76
 }
-static QString num(double v, int d) { return QString::number(v, 'f', d); }
+QString num(double v, int d) {
+  const QString s = QString::number(v, 'f', d);
+  return s.startsWith('-') && s.toDouble() == 0 ? s.mid(1) : s;   // a fall too small to show is not "-0.0"
+}
 static QString withArrow(const QString& s, const QString& arrow) { return arrow.isEmpty() ? s : s + " " + arrow; }
 
 Move lastMove(const Inputs& in) {
@@ -240,6 +243,21 @@ QVector<Score> scoreAll(const QList<Inputs>& inputs) {
 }
 
 // ---------------------------------------------------------------- comparator
+double realRate(const Inputs& in, bool core) {
+  const Release& p = core ? in.coreCpi : in.cpi;
+  return std::isfinite(in.policyRate) && p.ok() ? in.policyRate - p.value : NAN;
+}
+
+// "Oct 2026", "Q3 2026" when the figure is quarterly
+static QString periodText(const Release& r) {
+  if (!r.period.isValid()) return {};
+  if (r.annual) return QString::number(r.period.year());
+  const int n = int(r.history.size());
+  if (n >= 2 && r.history[n - 2].date.daysTo(r.history[n - 1].date) > 80)
+    return QCoreApplication::translate("seasonal", "Q%1 %2").arg((r.period.month() - 1) / 3 + 1).arg(r.period.year());
+  return i18n::locale().toString(r.period, "MMM yyyy");
+}
+
 Comparison compare(const Inputs& a, const Inputs& b) {
   Comparison c;
   auto row = [&](const QString& label, double x, double y, bool higherBetter, const QString& unit, int dec) {
@@ -265,7 +283,7 @@ Comparison compare(const Inputs& a, const Inputs& b) {
   // why a side is missing (tooltips)
   const Release* ra[] = {nullptr, &a.cpi, &a.coreCpi, &a.gdp, &a.unemployment, &a.activity, &a.retail};
   const Release* rb[] = {nullptr, &b.cpi, &b.coreCpi, &b.gdp, &b.unemployment, &b.activity, &b.retail};
-  for (int i = 0; i < c.rows.size() && i < 7; ++i) {
+  for (int i = 0; i < c.rows.size() && i < kComparedRows; ++i) {
     QStringList n;
     if (i == 0) { if (!a.policyNote.isEmpty()) n << a.ccy + ": " + a.policyNote; if (!b.policyNote.isEmpty()) n << b.ccy + ": " + b.policyNote; }
     else {
@@ -275,6 +293,27 @@ Comparison compare(const Inputs& a, const Inputs& b) {
     }
     if (i == 5 && !sameActivity) n << QCoreApplication::translate("seasonal", "Different activity indices, not compared");
     c.rows[i].note = n.join("\n");
+  }
+  // the real rates: shown, never counted
+  for (const bool core : {false, true}) {
+    CompareRow r{core ? QCoreApplication::translate("seasonal", "Real rate (core CPI)") : QCoreApplication::translate("seasonal", "Real rate (CPI)"),
+                 realRate(a, core), realRate(b, core), 0, "%", 2};
+    if (std::isfinite(r.a) && std::isfinite(r.b) && std::abs(r.a - r.b) > 1e-9) r.better = r.a > r.b ? 1 : -1;
+    QStringList n;
+    for (const Inputs* in : {&a, &b}) {
+      const Release& p = core ? in->coreCpi : in->cpi;
+      if (std::isfinite(realRate(*in, core)))
+        n << QCoreApplication::translate("seasonal", "%1: policy rate %2% − CPI %3% (%4) = %5%")
+                 .arg(in->ccy, num(in->policyRate, 2), num(p.value, 1), periodText(p), num(realRate(*in, core), 2));
+      else n << in->ccy + ": " + (!std::isfinite(in->policyRate) && !in->policyNote.isEmpty() ? in->policyNote : !p.ok() && !p.note.isEmpty() ? p.note : QString::fromUtf8("—"));
+    }
+    r.note = n.join("\n");
+    c.rows << r;
+    if (core || !std::isfinite(r.a) || !std::isfinite(r.b)) continue;
+    const double gap = r.a - r.b;
+    c.carry = std::abs(gap) < 0.005 ? QCoreApplication::translate("seasonal", "Carry: %1 and %2 yield the same after inflation").arg(a.ccy, b.ccy)
+                                    : QCoreApplication::translate("seasonal", "Carry: %1 yields %2 pt more than %3 after inflation")
+                                          .arg(gap > 0 ? a.ccy : b.ccy, num(std::abs(gap), 2), gap > 0 ? b.ccy : a.ccy);
   }
   c.winner = c.leadsA > c.leadsB ? 1 : c.leadsA < c.leadsB ? -1 : 0;
   c.verdict = c.counted == 0 ? QCoreApplication::translate("seasonal", "Not enough releases to compare")

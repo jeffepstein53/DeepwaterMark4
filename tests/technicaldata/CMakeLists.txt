@@ -31,8 +31,11 @@ add_executable(technicaldata_tests ${CHARTS_CORE}
   ${DW_ROOT}/src/technicaldata/ArchiveCollector.cpp ${DW_ROOT}/src/technicaldata/ArchiveCollector.h
   ${DW_ROOT}/src/technicaldata/TechnicalDataStore.cpp ${DW_ROOT}/src/technicaldata/TechnicalDataStore.h
   ${DW_ROOT}/src/technicaldata/Collector.cpp ${DW_ROOT}/src/technicaldata/Collector.h
-  ${DW_ROOT}/src/net/Http.cpp ${DW_ROOT}/src/net/Http.h ${DW_ROOT}/src/net/Sources.cpp ${DW_ROOT}/src/net/Sources.h
-  ${DW_ROOT}/src/core/Settings.cpp ${DW_ROOT}/src/core/Paths.cpp)
+  ${DW_ROOT}/src/net/Http.cpp ${DW_ROOT}/src/net/Http.h ${DW_ROOT}/src/net/Sources.cpp ${DW_ROOT}/src/net/Sources.h ${DW_ROOT}/src/net/Silent.cpp
+  ${DW_ROOT}/src/core/Settings.cpp ${DW_ROOT}/src/core/Secret.cpp ${DW_ROOT}/src/core/Paths.cpp)
 target_include_directories(technicaldata_tests PRIVATE ${DW_ROOT}/src ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(technicaldata_tests PRIVATE Qt6::Core Qt6::Sql Qt6::Network Qt6::Concurrent quickjs lzmadec miniz)
+if(WIN32)
+  target_link_libraries(technicaldata_tests PRIVATE crypt32)
+endif()
 qt_add_resources(technicaldata_tests technicaldata_pinets PREFIX "/pinets" BASE ${DW_ROOT}/third_party/pinets FILES ${DW_ROOT}/third_party/pinets/pinets.js)

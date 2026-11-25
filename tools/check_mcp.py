@@ -105,7 +105,7 @@ check('Deepwater closed: initialize answers', a.get('result', {}).get('serverInf
 early.send('notifications/initialized', request=False)
 a = early.send('tools/list')
 closed_tools = a.get('result', {}).get('tools', [])
-check('Deepwater closed: the tools are listed', len(closed_tools) == (25 if with_journal else 24), len(closed_tools))
+check('Deepwater closed: the tools are listed', len(closed_tools) == (26 if with_journal else 25), len(closed_tools))
 check('Deepwater closed: ping answers', 'result' in early.send('ping'))
 a = early.call('get_market_hours')
 check('Deepwater closed: a call says what to do', a.get('result', {}).get('isError') is True and 'not open' in text_of(a), a)
@@ -138,7 +138,7 @@ try:
     check('a bridge started while Deepwater was closed answers once it is open', a2.get('result', {}).get('isError') is False, a2)
     early.close()
     print('      %d tools: %s' % (len(tools), ', '.join(tools)))
-    check('%d tools are offered' % (25 if with_journal else 24), len(tools) == (25 if with_journal else 24), len(tools))
+    check('%d tools are offered' % (26 if with_journal else 25), len(tools) == (26 if with_journal else 25), len(tools))
     check('the trading journal is %s' % ('offered when switched on' if with_journal else 'not offered by default'),
           ('get_track_record' in tools) == with_journal)
     check('every tool has a description and a schema', all(t.get('description') and t.get('inputSchema') for t in a['result']['tools']))

@@ -1,6 +1,8 @@
 #include "macro/CentralBanks.h"
 #include "macro/Csv.h"
 #include "macro/CentralBanksImpl.h"
+#include "macro/RateTables.h"
+#include "news/Calendar.h"
 #include "market/Candles.h"
 #include "net/Http.h"
 #include "net/Sources.h"
@@ -146,60 +148,8 @@ double Odds::at(int b) const {
   switch (b) { case 0: return cut50; case 1: return cut25; case 2: return hold; case 3: return hike25; default: return hike50; }
 }
 
-QVector<double> solveMeetingRates(double r0, const QVector<QDate>& eff, const QVector<RateContract>& cs) {
-  const int M = eff.size();
-  QVector<double> r(M + 1, NAN); r[0] = r0;
-  int solved = 0;   // highest regime index with a known rate
-  for (const auto& c : cs) {
-    if (!std::isfinite(c.avg) || !c.start.isValid() || c.end <= c.start) continue;
-    QVector<double> w(M + 1, 0.0);
-    int kmax = 0;
-    for (QDate d = c.start; d < c.end; d = d.addDays(1)) {
-      int k = 0; while (k < M && eff[k] <= d) ++k;
-      w[k] += 1; kmax = qMax(kmax, k);
-    }
-    const double T = c.end.daysTo(c.start) * -1.0;
-    if (kmax <= solved) continue;   // nothing new in this contract
-    double known = 0, wU = 0, wUk = 0;
-    for (int k = 0; k <= kmax; ++k) {
-      if (k <= solved) known += w[k] * r[k];
-      else { wU += w[k]; wUk += w[k] * (k - solved); }
-    }
-    if (wU / T < 0.2 || wUk <= 0) continue;   // too little weight: let a later contract decide
-    const double delta = (c.avg * T - known - r[solved] * wU) / wUk;
-    for (int k = solved + 1; k <= kmax; ++k) r[k] = r[solved] + (k - solved) * delta;
-    solved = kmax;
-  }
-  return r.mid(1);
-}
-
-QVector<Odds> oddsFromPath(double r0, const QVector<double>& rates) {
-  QVector<Odds> out;
-  // distribution over cumulative 25 bp steps, index offset 40
-  const int N = 81, Z = 40;
-  QVector<double> dist(N, 0.0); dist[Z] = 1;
-  double prev = r0;
-  for (double r : rates) {
-    if (!std::isfinite(r)) break;
-    const double steps = (r - prev) / 0.25;
-    const int k = int(std::floor(steps));
-    const double f = steps - k;
-    QVector<double> nd(N, 0.0);
-    for (int i = 0; i < N; ++i) {
-      if (dist[i] == 0) continue;
-      const int a = qBound(0, i + k, N - 1), b = qBound(0, i + k + 1, N - 1);
-      nd[a] += dist[i] * (1 - f); nd[b] += dist[i] * f;
-    }
-    dist = nd; prev = r;
-    Odds o; o.cut50 = 0; o.cut25 = dist[Z - 1]; o.hold = dist[Z]; o.hike25 = dist[Z + 1]; o.hike50 = 0;
-    for (int i = 0; i < Z - 1; ++i) o.cut50 += dist[i];
-    for (int i = Z + 2; i < N; ++i) o.hike50 += dist[i];
-    out << o;
-  }
-  return out;
-}
-
 // ------------------------------------------------------------------------------------------------ bank
+QString Bank::shownCode() const { return QCoreApplication::translate("economy", code.toUtf8().constData()); }
 MeetingDate Bank::nextMeeting() const {
   const QDate today = QDate::currentDate();
   for (const auto& m : meetings) if (m.decision >= today) return m;
@@ -207,8 +157,7 @@ MeetingDate Bank::nextMeeting() const {
 }
 int Bank::daysToNext() const {
   const auto m = nextMeeting();
-  // decision day of a two-day meeting: the first day has passed, the meeting is under way (0, not -1 = unknown)
-  return m.decision.isValid() ? qMax(0, int(QDate::currentDate().daysTo(m.first.isValid() ? m.first : m.decision))) : -1;
+  return m.decision.isValid() ? qMax(0, int(QDate::currentDate().daysTo(m.decision))) : -1;
 }
 QList<MeetingDate> Bank::upcoming(int n) const {
   QList<MeetingDate> out;
@@ -259,21 +208,21 @@ CentralBanks::CentralBanks() {
        "https://www.bankofcanada.ca/core-functions/monetary-policy/key-interest-rate/"),
   };
   for (auto& b : m_banks) {
-    b.pricingNote = QCoreApplication::translate("economy", "No free futures or OIS feed is wired for the %1; Polymarket, the reference's source, is unreachable here.")
-                      .arg(QCoreApplication::translate("economy", b.name.toUtf8().constData()));
+    b.pricingNote = QCoreApplication::translate("economy", "Reading what the market prices…");
   }
   loadSchedule();
   m_polyStatus = QCoreApplication::translate("economy", "Not checked yet");
   connect(&i18n::Notifier::instance(), &i18n::Notifier::changed, this, &CentralBanks::retranslate);
   m_activeTimer.setInterval(60 * 1000);
   connect(&m_activeTimer, &QTimer::timeout, this, [this] { ensureLoaded(); });   // each part at its own pace inside
+  m_pictureTimer.setSingleShot(true);
+  connect(&m_pictureTimer, &QTimer::timeout, this, &CentralBanks::nextPicture);
 }
 
 void CentralBanks::retranslate() {
   for (auto& b : m_banks) {
     if (!b.priced)
-      b.pricingNote = QCoreApplication::translate("economy", "No free futures or OIS feed is wired for the %1; Polymarket, the reference's source, is unreachable here.")
-                        .arg(QCoreApplication::translate("economy", b.name.toUtf8().constData()));
+      b.pricingNote = QCoreApplication::translate("economy", "Reading what the market prices…");
   }
   m_polyStatus = QCoreApplication::translate("economy", "Not checked yet");
   m_started.clear();
@@ -336,10 +285,11 @@ void CentralBanks::ensureLoaded() {
   if (due("fedschedule", 24 * 60 * M)) loadFedSchedule();
   if (due("fedpricing", (shown ? 5 : 15) * M)) loadFedPricing();
   if (due("ecbpricing", (shown ? 5 : 60) * M)) loadEcbPricing();
-  if (due("bocpricing", 60 * M)) loadBocPricing();
-  if (due("boepricing", 120 * M)) loadBoePricing();
-  if (due("bojpricing", 120 * M)) loadBojPricing();
-  if (due("snbpricing", 120 * M)) loadSnbPricing();
+  // published once a day: asked every half-hour, the answer kept in the cache as long as each site allows
+  if (due("bocpricing", 30 * M)) loadBocPricing();
+  if (due("boepricing", 30 * M)) loadBoePricing();
+  if (due("bojpricing", 30 * M)) loadBojPricing();
+  if (due("snbpricing", 30 * M)) loadSnbPricing();
   if (due("fjpricing", 30 * M)) loadFjPricing();
   if (due("decisions", 6 * 60 * M)) loadDecisions();
   if (due("poly", 6 * 60 * M)) probePolymarket();
@@ -395,13 +345,16 @@ void CentralBanks::loadRates() {
         m_rateHist[it2.key()] = *it2;
         Bank* b = mut(it2.key());
         if (!b || it2->isEmpty()) continue;
-        if (!std::isfinite(b->rate) || b->rateSourceEn.startsWith("BIS")) {   // English: the shown text is translated
+        if (!std::isfinite(b->rate) || b->rateSourceEn.startsWith("BIS") ||   // English: the shown text is translated
+            (b->rateSourceEn.startsWith("Release calendar") && it2->last().first > b->rateAsOf)) {
           b->rate = it2->last().second; b->rateAsOf = it2->last().first; b->rateFetched = rep.fetched.toLocalTime();
           b->rateSourceEn = QStringLiteral("BIS central bank policy rates (daily)"); b->rateSource = QCoreApplication::translate("economy", "BIS central bank policy rates (daily)");
           b->rateNote = QCoreApplication::translate("economy", "as of %1").arg(i18n::locale().toString(b->rateAsOf, QCoreApplication::translate("economy", "MMM d")));
         }
         derive(*b);
       }
+      readCalendarDecisions();
+      for (const char* id : {"RBA", "RBNZ"}) applyFjTable(id);   // a picture read before the rate arrived
       changed();
     });
   }
@@ -536,6 +489,38 @@ void CentralBanks::loadRates() {
   }
 }
 
+void CentralBanks::readCalendarDecisions() {
+  auto& cal = news::Calendar::instance();
+  if (!m_calendarWatched) {
+    m_calendarWatched = true;
+    connect(&cal, &news::Calendar::weekLoaded, this, [this] { readCalendarDecisions(); });
+    connect(&cal, &news::Calendar::actualArrived, this, [this](const news::Event& e) {
+      if (!ratetables::decisionOf(e.currency, e.title).isEmpty()) readCalendarDecisions();
+    });
+  }
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  bool any = false;
+  for (int w = 3; w >= 0; --w)
+    for (const news::Event& e : cal.events(news::Calendar::currentWeek().addDays(-7 * w))) {
+      const QString id = ratetables::decisionOf(e.currency, e.title);
+      if (id.isEmpty() || e.time > now || !e.actual.num() || e.actual.suffix != "%" || std::fabs(e.actual.v) > 20) continue;
+      Bank* b = mut(id);
+      const QDate day = e.time.date();
+      if (!b || (b->rateAsOf.isValid() && b->rateAsOf >= day)) continue;   // the official series already has it
+      QString src = e.actualSource;
+      src.remove(" headline").remove(" official series");
+      b->rate = e.actual.v; b->rateAsOf = day; b->rateFetched = now.toLocalTime(); b->rateText.clear();
+      b->rateNote = QCoreApplication::translate("economy", "as of %1").arg(i18n::locale().toString(day, QCoreApplication::translate("economy", "MMM d")));
+      b->rateSourceEn = QStringLiteral("Release calendar, decision of the day");
+      b->rateSource = QCoreApplication::translate("economy", "Release calendar, decision of the day (%1)").arg(src);
+      auto& h = m_rateHist[id];
+      if (h.isEmpty() || h.last().first <= day) h.append({day.addDays(1), e.actual.v});
+      derive(*b);
+      any = true;
+    }
+  if (any) changed();
+}
+
 void CentralBanks::loadFedSchedule() {
   net::Request r; r.ttlSec = 24 * 3600;
   r.url = QUrl("https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm");
@@ -582,7 +567,7 @@ namespace detail {
 QDate immDate(int y, int m) { return imm(y, m); }
 
 void computeFromQuotes(Bank& b, const QVector<QDate>& eff, const QList<MeetingDate>& meets,
-                       const QList<QPair<QString, RateContract>>& contracts, const Gather& g, int effLagDays) {
+                       const QList<QPair<QString, RateContract>>& contracts, const Gather& g, int effLagDays, const Hint& hint) {
   Q_UNUSED(effLagDays);
   // latest prices
   auto solveAt = [&](qint64 tMax, bool hourly) {
@@ -594,7 +579,7 @@ void computeFromQuotes(Bank& b, const QVector<QDate>& eff, const QList<MeetingDa
       if (!std::isfinite(px)) continue;
       RateContract c = c0; c.avg = 100.0 - px; cs << c;
     }
-    return solveMeetingRates(b.overnight, eff, cs);
+    return solveMeetingRates(b.overnight, eff, cs, hint ? hint(tMax) : QVector<double>{});
   };
   const qint64 now = QDateTime::currentSecsSinceEpoch();
   const QVector<double> r = solveAt(now + 86400, false);
@@ -626,14 +611,19 @@ void computeFromQuotes(Bank& b, const QVector<QDate>& eff, const QList<MeetingDa
   b.historySource = useHourly ? "hourly closes" : "daily settlements";
 }
 QString withSharedContractCaveat(const QString& note, const Bank& b, const QVector<QDate>& eff,
-                                 const QList<QPair<QString, RateContract>>& contracts) {
+                                 const QList<QPair<QString, RateContract>>& contracts, const QDateTime& splitAt, bool* applies) {
+  if (applies) *applies = false;
   if (!b.priced) return note;
   const int n = qMin(int(eff.size()), int(b.path.size()));
   for (const auto& [sym, c] : contracts)
     for (int i = 0; i + 1 < n; ++i)
       if (c.start < eff[i] && eff[i + 1] < c.end) {
-        const QString cav = QCoreApplication::translate("economy", "Two meetings fall inside one 3-month contract: a move priced only for the "
-                                                        "second one is shown split between both (the futures can't tell them apart).");
+        if (applies) *applies = true;
+        const QString cav = splitAt.isValid()
+            ? QCoreApplication::translate("economy", "Two meetings fall inside one 3-month contract: its move is shared between them as in "
+                                          "FinancialJuice's table of %1.").arg(i18n::locale().toString(splitAt.toLocalTime(), "dd MMM HH:mm"))
+            : QCoreApplication::translate("economy", "Two meetings fall inside one 3-month contract: a move priced only for the "
+                                          "second one is shown split between both (the futures can't tell them apart).");
         return note.isEmpty() ? cav : note + " " + cav;
       }
   return note;
@@ -700,10 +690,12 @@ void CentralBanks::loadEcbPricing() {
     if (--g->pending > 0) return;
     Bank* eb = mut("ECB");
     if (!std::isfinite(eb->rate)) return;
-    computeFromQuotes(*eb, eff, meets, contracts, *g, 6);
+    QDateTime splitAt; bool shared = false;
+    computeFromQuotes(*eb, eff, meets, contracts, *g, 6, detail::pictureHint(*eb, meets, &splitAt));
     eb->pricingSourceEn = QStringLiteral("computed by Deepwater from CME 3-month €STR futures (ESR, via Yahoo Finance)"); eb->pricingSource = QCoreApplication::translate("economy", "computed by Deepwater from CME 3-month €STR futures (ESR, via Yahoo Finance)");
     eb->pricingNote = eb->priced ? QCoreApplication::translate("economy", "Thin market: few trades per day, odds can lag.") : QCoreApplication::translate("economy", "€STR futures did not answer.");
-    eb->pricingNote = detail::withSharedContractCaveat(eb->pricingNote, *eb, eff, contracts);
+    eb->pricingNote = detail::withSharedContractCaveat(eb->pricingNote, *eb, eff, contracts, splitAt, &shared);
+    m_split["ECB"] = shared ? splitAt : QDateTime();
     changed();
   };
   for (const auto& [sym, c] : contracts)
@@ -767,10 +759,12 @@ void CentralBanks::loadBocPricing() {
     for (auto& ser : g.daily) std::sort(ser.bars.begin(), ser.bars.end(), [](auto& a, auto& b) { return a.t < b.t; });
     const QList<MeetingDate> meets = bb->upcoming(10);
     QVector<QDate> eff; for (const auto& m : meets) eff << m.decision.addDays(1);
-    computeFromQuotes(*bb, eff, meets, contracts, g, 1);
+    QDateTime splitAt; bool shared = false;
+    computeFromQuotes(*bb, eff, meets, contracts, g, 1, detail::pictureHint(*bb, meets, &splitAt));
     bb->pricingSourceEn = QStringLiteral("computed by Deepwater from Montréal Exchange 3-month CORRA futures (CRA, settlement prices)"); bb->pricingSource = QCoreApplication::translate("economy", "computed by Deepwater from Montréal Exchange 3-month CORRA futures (CRA, settlement prices)");
     bb->pricingNote = bb->priced ? QString() : QCoreApplication::translate("economy", "CORRA futures did not answer.");
-    bb->pricingNote = detail::withSharedContractCaveat(bb->pricingNote, *bb, eff, contracts);
+    bb->pricingNote = detail::withSharedContractCaveat(bb->pricingNote, *bb, eff, contracts, splitAt, &shared);
+    m_split["BOC"] = shared ? splitAt : QDateTime();
     bb->historySource = "snapshots recorded by this app";
     changed();
   });

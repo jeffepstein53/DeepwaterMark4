@@ -48,6 +48,14 @@ struct BankForecast {
   QDate published;
 };
 
+// Another figure of the same release ("PCE Price Index YoY" beside Core PCE m/m, full-time jobs beside the total).
+struct Detail {
+  QString name;          // as its source names it
+  QString actual, forecast, previous, revised;
+  QString source;        // "FinancialJuice", "ABS"
+  QDateTime at;          // when the source published it (UTC)
+};
+
 struct Event {
   QString key;           // unique id: "<ccy>|<title>|<utc time>"
   QString seriesKey;     // same indicator across weeks: "<ccy>|<title>"
@@ -66,10 +74,19 @@ struct Event {
   QString actualSource;  // who gave the actual: "Myfxbook", "investingLive headline", "OECD official series" …
   QString actualDetail;  // the headline or the official observation it was read from (tooltips)
   QDateTime actualAt;    // when Deepwater recorded the actual (UTC)
+  QDateTime actualPub;   // when its headline was published (UTC); a later headline of the same wire corrects it
+  // How many of the calendar's own figures (previous, forecast) the source of the actual repeats: 0 none (the item may
+  // be a neighbouring series), 1 or 2; 9: official series; -1: recorded before 0.4.4
+  int quality = -1;
+  QString other;         // another source's figure when it differs: "FinancialJuice 2.3%"
+  QStringList also;      // the other sources that gave the same figure: "Myfxbook", "BLS"
+  Value revised;         // the previous figure as revised in this release; empty when it was not
+  QString revisedSource;
+  QList<Detail> details; // other figures of the same release
 
   double surprise() const;        // actual − forecast in the actual's unit; NaN when one is missing
   QString surpriseText() const;   // "+10.9K", "-0.1%", "" when none
-  int direction() const;          // +1 actual > previous, -1 below, 0 equal / unknown
+  int direction() const;          // +1 actual > previous (revised when it was), -1 below, 0 equal / unknown
   bool released() const { return actual.has(); }
   bool isSpeech() const;
   bool hasRange() const { return low.num() && high.num(); }
@@ -79,6 +96,14 @@ struct Event {
 // "série officielle BLS", detail lines with their series name and period translated.
 QString actualSourceText(const Event& e);
 QString actualDetailText(const Event& e);
+QString revisedText(const Event& e);          // "Previous revised to 202K, first published 203K (Myfxbook)"; empty when not revised
+QString otherText(const Event& e);            // "Another source gives a different figure: FinancialJuice 2.3%"; empty when none
+QString alsoText(const Event& e);             // "Same figure from a second source: Myfxbook, BLS."; empty when no other gave it
+QString sourceOf(const Event& e);             // who gave the actual, short: "FinancialJuice", "BLS", "Myfxbook"
+QString detailsText(const Event& e);          // "Published with it: PCE Price Index YoY 3.8% (forecast 3.8%, previous 3.6%) · …"
+
+// Exposed for the tests: a feed's figure brought to the calendar's unit, sign and precision. False: not the same scale.
+bool adaptToEvent(Value& actual, Value& previous, const Event& e);
 
 class Calendar : public QObject {
   Q_OBJECT
@@ -107,11 +132,16 @@ public:
   void startBackground();
 
   // Actual from a data headline (wire). Returns true when it matched one event and was recorded. The event must
-  // share the currency and the indicator words, be released at most 5 min after / 20 min before the headline,
-  // use the same unit and agree on the stated forecast or prior; ambiguous matches are dropped.
+  // share the currency, the country and the indicator words, be released at most 5 min after / 20 min before the
+  // headline, use the same unit and agree on the stated forecast or prior; ambiguous matches are dropped. A headline
+  // of FinancialJuice's fixed format that repeats neither figure (both come from other surveys than ForexFactory's)
+  // is taken only when it names the event in full, alone in its window, with a previous close to the calendar's.
+  // One that matches no event is kept as a detail of the release it belongs to (Event::details).
   bool applyHeadline(const struct DataHeadline& h, const QDateTime& time, const QString& source, const QString& text);
   // Actuals from official series for the past events of a week that still have none (async).
   void fillOfficial(const QDate& weekStart);
+  // Medium and high impact results published more than `lateSec` ago (and in the last day) that still have no figure.
+  QList<Event> missingResults(int lateSec = 1800, const QDateTime& nowUtc = {}) const;
 
   // Description of an indicator, written by Deepwater from the indicator type (two paragraphs).
   static QStringList describe(const Event& e);
@@ -136,9 +166,10 @@ private:
   void readWeek(const QDate& week);
   void saveWeek(const QDate& week);
   struct Match { QDate week; int index = -1; QString key; double score = 0; };   // a Myfxbook item → one event (key)
-  Match matchActual(const QString& ccy, const QDateTime& t, const QString& name, const Value& previous,
-                    const Value& consensus);
-  void applyActual(const QString& name, const Match& m, const Value& actual);
+  Match matchActual(const QString& ccy, const QString& country, const QDateTime& t, const QString& name,
+                    const Value& previous, const Value& consensus);
+  void applyActual(const QString& name, const Match& m, Value actual, Value previous, const Value& consensus);
+  void planOfficial();                                 // the official series just after the releases still without a figure
   void schedule();
 
   QHash<QDate, QList<Event>> m_weeks;
@@ -156,5 +187,9 @@ private:
   QDateTime m_lastActualsTry;                          // last request that left the machine, answered or not
   QSet<QObject*> m_active;
   QTimer m_poll;                                       // single shot, set by planPoll
+  QTimer m_official;                                   // single shot, set by planOfficial
+  void touch(const QDate& week);                       // saves and announces a week shortly: many small changes at once
+  QSet<QDate> m_touched;
+  QTimer m_touch;
 };
 }

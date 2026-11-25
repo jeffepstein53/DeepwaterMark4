@@ -12,6 +12,7 @@
 #include <algorithm>
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
 #else
 #include <sys/resource.h>
 #endif
@@ -41,6 +42,10 @@ double rssMB() {
   mach_msg_type_number_t n = TASK_VM_INFO_COUNT;
   if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&info), &n) == KERN_SUCCESS)
     return info.phys_footprint / (1024.0 * 1024.0);
+#elif defined(_WIN32)
+  PROCESS_MEMORY_COUNTERS_EX m{};
+  m.cb = sizeof m;
+  if (GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&m), sizeof m)) return m.PrivateUsage / (1024.0 * 1024.0);
 #endif
   return 0;
 }

@@ -19,14 +19,20 @@ struct Gather {
   std::function<void()> done;
 };
 // Fills b.path, odds, impliedBp, impliedBpWeekAgo and history from futures prices (price = 100 - rate).
+// `hint`: the moves a published table gives for the same meetings, at a moment (solveMeetingRates); may be empty.
+using Hint = std::function<QVector<double>(qint64 utcSec)>;
 void computeFromQuotes(Bank& b, const QVector<QDate>& eff, const QList<MeetingDate>& meets,
-                       const QList<QPair<QString, RateContract>>& contracts, const Gather& g, int effLagDays);
+                       const QList<QPair<QString, RateContract>>& contracts, const Gather& g, int effLagDays, const Hint& hint = {});
+// The bank's FinancialJuice tables as a hint for these meetings; empty (and *at invalid) when the newest is older than the
+// last decision or than five market days.
+Hint pictureHint(const Bank& b, const QList<MeetingDate>& meets, QDateTime* at);
 QDate immDate(int y, int m);   // third Wednesday
 // Model limit of solveMeetingRates (3-month contracts, ECB / BoC / BoJ / SNB): when two priced meetings fall inside one
-// contract, a move priced only at the second is shown split between both. Returns `note` (the bank's other note) with
-// that caveat (translated) appended when it applies to b.path, else `note` unchanged.
+// contract, its move is shared between both: as in the FinancialJuice table of `splitAt`, equally without one. Returns
+// `note` (the bank's other note) with that caveat (translated) appended when it applies to b.path, else `note` unchanged.
+// *applies: it does.
 QString withSharedContractCaveat(const QString& note, const Bank& b, const QVector<QDate>& eff,
-                                 const QList<QPair<QString, RateContract>>& contracts);
+                                 const QList<QPair<QString, RateContract>>& contracts, const QDateTime& splitAt = {}, bool* applies = nullptr);
 // Appends one snapshot of prices to paths::data("macro")/<file> (if the last is older than 50 min, keeps 120 days)
 // and merges every recorded snapshot into g.daily (the terminal's own history for snapshot-only sources).
 void recordSnapshots(const QString& file, qint64 fetchedUtc, Gather& g);

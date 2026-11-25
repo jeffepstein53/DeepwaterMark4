@@ -213,6 +213,7 @@ void RangePanel::paintEvent(QPaintEvent*) {
     source(QCoreApplication::translate("news", "Actual · %1 · %2recorded %3").arg(news::actualSourceText(e), e.actualDetail.isEmpty() ? QString() : news::actualDetailText(e) + " · ",
                                                                      en.toString(e.actualAt.toLocalTime(), "d MMM HH:mm")),
            e.actualSource.startsWith("Myfxbook") ? "https://www.myfxbook.com/forex-economic-calendar" : QString(), {}, true);
+  for (const QString& t : {news::alsoText(e), news::otherText(e), news::revisedText(e)}) if (!t.isEmpty()) source(t, QString(), {}, true);
   for (const auto& b : e.banks)
     source(b.bank + " — " + b.source, b.url, en.toString(b.published, "d MMM"), true);
   if (!range) {

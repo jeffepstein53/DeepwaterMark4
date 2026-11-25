@@ -90,6 +90,17 @@ void CalendarTable::setEvents(const QList<news::Event>& ev) {
   m_scroll = std::clamp(m_scroll, 0.0, maxScroll());
   update();
   emit contentChanged();
+  if (m_openToday && !m_items.isEmpty()) {
+    m_openToday = false;
+    const QDate today = QDate::currentDate();
+    for (const auto& it : m_items)
+      if (it.kind == Item::Group && it.day >= today) {
+        if (it.first) break;                        // the week begins today or later: its top is the place
+        if (m_full) emit openAt(int(it.y));
+        else setScroll(it.y);
+        break;
+      }
+  }
 }
 
 void CalendarTable::setFullHeight(bool on) {
@@ -147,7 +158,11 @@ double CalendarTable::rightOf(int col) const {
   return -1000;
 }
 
-QStringList CalendarTable::descParas(const news::Event& e) const { return news::Calendar::describe(e); }
+QStringList CalendarTable::descParas(const news::Event& e) const {
+  QStringList out = news::Calendar::describe(e);
+  for (const QString& t : {news::alsoText(e), news::otherText(e), news::revisedText(e), news::detailsText(e)}) if (!t.isEmpty()) out << t;
+  return out;
+}
 
 void CalendarTable::relayout() {
   m_items.clear();
@@ -326,7 +341,7 @@ void CalendarTable::paintRow(QPainter& p, const Item& it, double y, bool pinned)
   };
   // actual + arrow
   if (e.actual.has()) {
-    put(Actual, e.actual.text, kActual, true, 12);
+    put(Actual, e.actual.text + (e.other.isEmpty() ? "" : "?"), kActual, true, 12);
     const int dir = e.direction();
     if (dir) {
       p.setRenderHint(QPainter::Antialiasing, true);
@@ -338,7 +353,7 @@ void CalendarTable::paintRow(QPainter& p, const Item& it, double y, bool pinned)
     }
   } else put(Actual, "—", kActual, true, 12);
   put(Forecast, e.forecast.has() ? e.forecast.text : "—", e.forecast.has() ? kFcst : kDash, false);
-  put(Previous, e.previous.has() ? e.previous.text : "—", e.previous.has() ? kPrev : kDash, false);
+  put(Previous, e.revised.has() ? e.revised.text + "*" : e.previous.has() ? e.previous.text : "—", e.previous.has() ? kPrev : kDash, false);
   const double s = e.surprise();
   put(Surprise, std::isfinite(s) ? e.surpriseText() : "—", !std::isfinite(s) ? kDash : s > 0 ? kSurPos : s < 0 ? kSurNeg : kFcst, false);
   for (int col : {Min, Max}) {
@@ -428,7 +443,7 @@ void CalendarTable::paintRowPhone(QPainter& p, const Item& it, double y) const {
     p.drawText(QRectF(rightOf(col) - 200 - rightPad, cy2 - 12, 200, 24), Qt::AlignRight | Qt::AlignVCenter, t);
   };
   if (e.actual.has()) {
-    put(Actual, e.actual.text, kActual, true, 12);
+    put(Actual, e.actual.text + (e.other.isEmpty() ? "" : "?"), kActual, true, 12);
     if (const int dir = e.direction()) {
       p.setRenderHint(QPainter::Antialiasing, true);
       p.setPen(QPen((dir > 0 ? kUp : kDown).c(), 1.2));
@@ -439,7 +454,7 @@ void CalendarTable::paintRowPhone(QPainter& p, const Item& it, double y) const {
     }
   } else put(Actual, "—", kActual, true, 12);
   put(Forecast, e.forecast.has() ? e.forecast.text : "—", e.forecast.has() ? kFcst : kDash, false);
-  put(Previous, e.previous.has() ? e.previous.text : "—", e.previous.has() ? kPrev : kDash, false);
+  put(Previous, e.revised.has() ? e.revised.text + "*" : e.previous.has() ? e.previous.text : "—", e.previous.has() ? kPrev : kDash, false);
   if (e.key == m_focusKey && m_focusCol >= Actual && shown(m_focusCol)) {
     const QRectF fr = cellRect(it, m_focusCol).translated(0, y - it.y);
     p.setPen(kFocus); p.drawRect(fr.adjusted(0.5, 2.5, -0.5, -2.5));
@@ -560,7 +575,11 @@ void CalendarTable::updateHover(const QPointF& pos) {
       else if (hc == Actual && e.released())
         QToolTip::showText(mapToGlobal(pos.toPoint()), QCoreApplication::translate("news", "Actual from %1, recorded %2%3").arg(news::actualSourceText(e),
                            i18n::locale().toString(e.actualAt.toLocalTime(), "ddd d MMM, HH:mm"),
-                           e.actualDetail.isEmpty() ? QString() : "\n" + news::actualDetailText(e)), this);
+                           e.actualDetail.isEmpty() ? QString() : "\n" + news::actualDetailText(e)) +
+                           (e.also.isEmpty() ? QString() : "\n" + news::alsoText(e)) +
+                           (e.other.isEmpty() ? QString() : "\n" + news::otherText(e)), this);
+      else if (hc == Previous && e.revised.has())
+        QToolTip::showText(mapToGlobal(pos.toPoint()), ui::plainTip(news::revisedText(e)), this);
       else if (hc == Forecast && e.forecast.has())
         QToolTip::showText(mapToGlobal(pos.toPoint()), ui::plainTip(QCoreApplication::translate("news", "Consensus forecast: %1").arg(e.forecastSource)), this);
       else if (hc == EventCol && !(!shown(Surprise) || !shown(Min)))   // names may be elided: full title

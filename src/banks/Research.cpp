@@ -3,6 +3,8 @@
 #include "net/Http.h"
 #include "net/Sources.h"
 #include "core/Paths.h"
+#include <QFutureWatcher>
+#include <QtConcurrent>
 #include <QXmlStreamReader>
 #include <QCoreApplication>
 #include <QRegularExpression>
@@ -71,7 +73,7 @@ QString shortText(QString t) {
 
 // podcast RSS (item: title, link or enclosure, pubDate, itunes:summary / description) or YouTube Atom (entry: title,
 // link href, published, media:description)
-void Research::readFeed(const QString& bank, const QString& show, bool video, const QByteArray& body) {
+static QList<Note> parseFeed(const QString& bank, const QString& show, bool video, const QByteArray& body) {
   QList<Note> out;
   QXmlStreamReader x(body);
   Note cur; bool in = false; QString enclosure, summary, description;
@@ -102,7 +104,17 @@ void Research::readFeed(const QString& bank, const QString& show, bool video, co
       out << cur;
     }
   }
-  if (!out.isEmpty()) merge(out);
+  return out;
+}
+// Off the window's thread. The reader decodes all it is given at once, and one feed is tens of MB (every episode's
+// transcript): its newest items are in the first MBs.
+void Research::readFeed(const QString& bank, const QString& show, bool video, const QByteArray& body) {
+  auto* w = new QFutureWatcher<QList<Note>>(this);
+  connect(w, &QFutureWatcher<QList<Note>>::finished, this, [this, w] {
+    w->deleteLater();
+    if (const QList<Note> out = w->result(); !out.isEmpty()) merge(out);
+  });
+  w->setFuture(QtConcurrent::run([bank, show, video, body = body.left(4 << 20)] { return parseFeed(bank, show, video, body); }));
 }
 
 QString pdfCacheFile(const QString& url) {

@@ -2,6 +2,8 @@
 #include "macro/Registry.h"
 #include "macro/CentralBanks.h"
 #include "macro/Csv.h"
+#include "macro/National.h"
+#include "news/Calendar.h"
 #include "core/Settings.h"
 #include "net/Http.h"
 #include "net/Sources.h"
@@ -165,9 +167,9 @@ const IndicatorInfo& info(Ind i) {
     {Ind::GdpYoy, QT_TRANSLATE_NOOP("economy", "GDP (Annual y/y)"), QT_TRANSLATE_NOOP("economy", "GDP Y/Y"), "%", 1, 1, false, "OECD",
      QT_TRANSLATE_NOOP("economy", "Real GDP, growth over the same quarter of the previous year (OECD Quarterly National Accounts).")},
     {Ind::Inflation, QT_TRANSLATE_NOOP("economy", "Inflation Rate (Annual)"), QT_TRANSLATE_NOOP("economy", "INFLATION"), "%", 1, -1, false, "BIS",
-     QT_TRANSLATE_NOOP("economy", "Consumer prices, year-on-year change, monthly (BIS long series of consumer prices, from national sources).")},
+     QT_TRANSLATE_NOOP("economy", "Consumer prices, year-on-year change, as the statistics office publishes it (BLS, Eurostat, ONS, Statistics Bureau of Japan, BFS, Statistics Canada, ABS); elsewhere and for the older history, the BIS long series.")},
     {Ind::Unemployment, QT_TRANSLATE_NOOP("economy", "Unemployment Rate"), QT_TRANSLATE_NOOP("economy", "UNEMPLOYMENT"), "%", 1, -1, false, "OECD",
-     QT_TRANSLATE_NOOP("economy", "Unemployment rate, % of labour force, seasonally adjusted, monthly (OECD Infra-annual labour statistics).")},
+     QT_TRANSLATE_NOOP("economy", "Unemployment rate, % of labour force, seasonally adjusted, as the statistics office publishes it (BLS, ONS, SECO, Statistics Canada, ABS); elsewhere the OECD's series (quarterly for New Zealand).")},
     {Ind::BusinessConf, QT_TRANSLATE_NOOP("economy", "Business Confidence (OECD)"), QT_TRANSLATE_NOOP("economy", "BUSINESS CONF."), "", 1, 1, false, "OECD",
      QT_TRANSLATE_NOOP("economy", "OECD business confidence indicator, amplitude adjusted (100 = long-term average). Shown in place of a PMI: S&P Global / ISM PMIs have no free source.")},
     {Ind::ConsumerConf, QT_TRANSLATE_NOOP("economy", "Consumer Confidence (OECD)"), QT_TRANSLATE_NOOP("economy", "CONSUMER CONF."), "", 1, 1, false, "OECD",
@@ -186,9 +188,9 @@ const IndicatorInfo& info(Ind i) {
     {Ind::GovDebt, QT_TRANSLATE_NOOP("economy", "Gov. Debt / GDP"), QT_TRANSLATE_NOOP("economy", "GOV. DEBT / GDP"), "%", 0, -1, false, "World Bank", QT_TRANSLATE_NOOP("economy", "Central government debt, total, % of GDP (World Bank WDI GC.DOD.TOTL.GD.ZS).")},
     {Ind::FxReserves, QT_TRANSLATE_NOOP("economy", "FX Reserves"), QT_TRANSLATE_NOOP("economy", "FX RESERVES"), "USD", 2, 1, true, "World Bank", QT_TRANSLATE_NOOP("economy", "Total reserves including gold, current US$ (World Bank WDI FI.RES.TOTL.CD).")},
     {Ind::CoreInflation, QT_TRANSLATE_NOOP("economy", "Core Inflation Rate (Annual)"), QT_TRANSLATE_NOOP("economy", "CORE INFLATION"), "%", 1, -1, false, "OECD",
-     QT_TRANSLATE_NOOP("economy", "Consumer prices excluding food and energy, year-on-year (OECD); the national series is used where it is fresher (ECB/Eurostat HICP excluding energy and food, BoC CPI-XFET, BFS core inflation 1 via the SNB, e-Stat CPI less fresh food and energy).")},
+     QT_TRANSLATE_NOOP("economy", "Core consumer prices, year-on-year, in each country's own definition: BLS less food and energy, Eurostat less energy and food, ONS less energy, food, alcohol and tobacco, Japan less fresh food, BoC CPI-XFET, BFS core inflation 1 via the SNB, ABS trimmed mean; elsewhere the OECD's (less food and energy).")},
     {Ind::RetailSalesYoy, QT_TRANSLATE_NOOP("economy", "Retail Sales (Annual y/y)"), QT_TRANSLATE_NOOP("economy", "RETAIL SALES"), "%", 1, 1, false, "OECD",
-     QT_TRANSLATE_NOOP("economy", "Retail trade volume, seasonally adjusted, change over 12 months, computed by Deepwater from the OECD index (quarterly where no monthly series exists).")},
+     QT_TRANSLATE_NOOP("economy", "Retail trade volume, seasonally adjusted, change over 12 months, computed by Deepwater from the OECD index (quarterly where no monthly series exists). Australia: ABS household spending at current prices, which replaced retail trade in 2025.")},
   };
   // translated copy for the interface language (rebuilt when the language changes)
   static QMutex mx; static QString lang; static QList<IndicatorInfo> tt;
@@ -223,6 +225,7 @@ QString formatValue(Ind i, double v) {
     if (v >= 1e6) return QString::number(v / 1e6, 'f', 1) + "M";
     return fmt::num(v / 1e3, 1) + "K";
   }
+  if (std::fabs(v) * std::pow(10.0, in.decimals) < 0.5) v = 0;   // never "-0.0%"
   if (in.unit == "%") return QString::number(v, 'f', in.decimals) + "%";
   return QString::number(v, 'f', in.decimals);
 }
@@ -257,10 +260,18 @@ MacroStore::MacroStore(bool deep) : m_deep(deep) {
 
 void MacroStore::merge(const QHash<QString, QHash<int, Series>>& add, const QString& key) {
   for (auto it = add.cbegin(); it != add.cend(); ++it)
-    for (auto jt = it->cbegin(); jt != it->cend(); ++jt) m_data[it.key()][jt.key()] = *jt;
+    for (auto jt = it->cbegin(); jt != it->cend(); ++jt) { m_data[it.key()][jt.key()] = *jt; remember(it.key(), *jt); }
   m_loaded.insert(key);
   if (m_parsing > 0) --m_parsing;
+  applyNational();
   emit updated();
+}
+
+void MacroStore::remember(const QString& iso2, const Series& s) {
+  static const QSet<QString> eight{"us", "ez", "gb", "jp", "ch", "ca", "au", "nz"};
+  static const QSet<int> kept{int(Ind::Inflation), int(Ind::CoreInflation), int(Ind::Unemployment), int(Ind::GdpQoq)};
+  if (m_deep || !s.ok() || !eight.contains(iso2) || !kept.contains(int(s.ind))) return;
+  m_readings[iso2][int(s.ind)][s.source] = s;
 }
 
 void MacroStore::ensureLoaded() {
@@ -299,6 +310,21 @@ void MacroStore::ensureLoaded() {
     {Ind::GovDebt, "GC.DOD.TOTL.GD.ZS"}, {Ind::FxReserves, "FI.RES.TOTL.CD"}};
   for (const auto& [ind, code] : wb) if (due("wb." + code, 24 * H)) loadWorldBank(ind, code);
   if (due("core-retail", 12 * H)) loadCoreAndRetail();
+  if (m_deep) return;   // the importer records the compilations as published, nothing laid over them
+  if (due("oecd.lfs.q", 12 * H))   // New Zealand publishes by quarter only
+    loadOecd("oecd.lfs.q", "https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_UNE_M,1.0/"
+                           "NZL..._Z.Y._T.Y_GE15..Q?startPeriod=2000-Q1&format=csv", 24 * 3600);
+  if (due("national", 3 * H)) loadNational();
+  if (!m_calendarWatched) {
+    m_calendarWatched = true;
+    auto& cal = news::Calendar::instance();
+    connect(&cal, &news::Calendar::weekLoaded, this, [this] { readCalendar(); });
+    connect(&cal, &news::Calendar::actualArrived, this, [this](const news::Event& e) {
+      // a figure read at the office itself: its copy of the whole series is fresh in the cache
+      if (e.quality == 9) if (const Economy* c = economyForCurrency(e.currency)) loadNational(c->iso2);
+    });
+    readCalendar();
+  }
 }
 
 void MacroStore::failed(const QString& key) {
@@ -369,7 +395,7 @@ void MacroStore::loadOecd(const QString& key, const QString& url, int ttl) {
     }
     QString col; QHash<QString, Ind> pick; QString ds;
     if (key == "oecd.qna") { col = "TRANSFORMATION"; pick = {{"G1", Ind::GdpQoq}, {"GY", Ind::GdpYoy}}; ds = "QNA"; }
-    else if (key == "oecd.lfs") { col = "MEASURE"; pick = {{"UNE_LF_M", Ind::Unemployment}}; ds = "LFS"; }
+    else if (key == "oecd.lfs" || key == "oecd.lfs.q") { col = "MEASURE"; pick = {{"UNE_LF_M", Ind::Unemployment}}; ds = "LFS"; }
     else if (key == "oecd.cli") { col = "MEASURE"; pick = {{"BCICP", Ind::BusinessConf}, {"CCICP", Ind::ConsumerConf}}; ds = "MEI/CLI"; }
     else { col = "MEASURE"; pick = {{"IRLT", Ind::Yield10y}, {"IR3TIB", Ind::Rate3m}}; ds = "FINMARK"; }
     ++m_parsing;
@@ -393,6 +419,8 @@ void MacroStore::loadWorldBank(Ind ind, const QString& code) {
 
 Series MacroStore::series(const QString& iso2, Ind i) const {
   Series s = m_data.value(iso2.toLower()).value(int(i));
+  if (const CalendarFigure f = m_calendar.value(iso2.toLower()).value(int(i)); f.valid())
+    s = national::withFlash(s, f, QDateTime::currentDateTimeUtc());
   if (i == Ind::PolicyRate) {
     // extend the monthly BIS history with the latest feed value (central bank or BIS daily)
     const PolicyRate pr = policyRate(iso2);
@@ -481,7 +509,9 @@ MacroStore::Coverage MacroStore::coverage() const {
 // ------------------------------------------------------------------------------------------------ core CPI + retail
 void MacroStore::putIfFresher(const QString& iso, const Series& s) {
   if (!s.ok()) return;
+  remember(iso, s);
   Series& cur = m_data[iso][int(s.ind)];
+  if (const Series n = m_national.value(iso).value(int(s.ind)); n.ok() && cur.source == n.source) cur = {};   // compare with compilations only
   if (!cur.ok() || s.last().date > cur.last().date) {
     // keep the older history of the replaced series before the new one starts
     Series merged = s;
@@ -493,6 +523,69 @@ void MacroStore::putIfFresher(const QString& iso, const Series& s) {
     }
     cur = merged;
   }
+  applyNational();
+}
+
+// ------------------------------------------------------------------------------------------------ national series
+void MacroStore::loadNational(const QString& iso2) {
+  if (m_deep) return;
+  for (const national::Def& d : national::defs()) {
+    if (!iso2.isEmpty() && d.iso2 != iso2) continue;
+    ++m_pending;
+    ++m_nationalPending[d.iso2];
+    official::fetch({d.agency, d.key}, national::ttlSec(d.agency), this, [this, d](const official::Answer& a) {
+      --m_pending;
+      if (m_nationalPending[d.iso2] > 0) --m_nationalPending[d.iso2];
+      const Series s = national::build(d, a);
+      if (a.ok() && s.ok()) {
+        m_national[d.iso2][int(d.ind)] = s;
+        applyNational();
+      } else {
+        qWarning().noquote() << "[macro]" << official::agencyName(d.agency) << d.key << (a.error.isEmpty() ? QStringLiteral("empty answer") : a.error);
+        failed("national");   // asked again in a few minutes; the ones that answered come from the cache
+      }
+      emit updated();
+    });
+  }
+}
+
+void MacroStore::applyNational() {
+  if (m_deep) return;
+  static const QHash<QString, bool> instead = [] {
+    QHash<QString, bool> h;
+    for (const auto& d : national::defs()) h.insert(d.iso2 + QString::number(int(d.ind)), d.instead);
+    return h;
+  }();
+  for (auto it = m_national.cbegin(); it != m_national.cend(); ++it)
+    for (auto jt = it->cbegin(); jt != it->cend(); ++jt) {
+      Series& cur = m_data[it.key()][jt.key()];
+      cur = national::overlay(cur, *jt, instead.value(it.key() + QString::number(jt.key())));
+    }
+}
+
+void MacroStore::readCalendar() {
+  if (m_deep) return;
+  auto& cal = news::Calendar::instance();
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  QHash<QString, QHash<int, CalendarFigure>> found;
+  const auto keep = [&found](const CalendarFigure& f) {
+    if (!f.valid()) return;
+    CalendarFigure& cur = found[f.iso2][int(f.ind)];
+    if (!cur.valid() || f.period > cur.period || (f.period == cur.period && f.published > cur.published)) cur = f;
+  };
+  for (int w = 0; w < 4; ++w)
+    for (const news::Event& e : cal.events(news::Calendar::currentWeek().addDays(-7 * w))) {
+      if (e.time > now) continue;
+      QString src = e.actualSource;
+      src.remove(" headline").remove(" official series");
+      if (e.actual.num() && e.actual.suffix == "%") keep(national::flashOf(e.currency, e.title, e.actual.v, e.time, src));
+      for (const news::Detail& d : e.details) {
+        const news::Value v = news::parseValue(d.actual);
+        if (v.num() && v.suffix == "%") keep(national::flashOfDetail(e.currency, d.name, v.v, e.time, d.source));
+      }
+    }
+  m_calendar = found;
+  emit updated();
 }
 
 void MacroStore::loadCoreAndRetail() {
@@ -579,6 +672,27 @@ void MacroStore::loadCoreAndRetail() {
         std::sort(s2.pts.begin(), s2.pts.end(), [](const Point& a, const Point& b) { return a.date < b.date; });
         putIfFresher("ez", s2); emit updated();
       });
+    });
+  }
+  // euro area: headline HICP from Eurostat (current EA, flash included), over the BIS series that comes weeks later
+  if (!m_deep) {
+    net::Request e; e.ttlSec = 3 * 3600;
+    e.url = u("https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&lang=EN"
+              "&geo=EA&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2016-01");
+    net::get(e, this, [this](const net::Reply& er) {
+      const auto o = QJsonDocument::fromJson(er.body).object();
+      const auto tix = o.value("dimension").toObject().value("time").toObject().value("category").toObject().value("index").toObject();
+      const auto vals = o.value("value").toObject();
+      if (!er.ok() || tix.isEmpty()) return;
+      Series s; s.ind = Ind::Inflation; s.iso2 = "ez"; s.freq = 'M'; s.source = "Eurostat"; s.dataset = "HICP all items (prc_hicp_minr)";
+      for (auto it = tix.begin(); it != tix.end(); ++it) {
+        const QString k = QString::number(it.value().toInt());
+        if (vals.contains(k)) s.pts << Point{QDate::fromString(it.key() + "-01", "yyyy-MM-dd"), vals.value(k).toDouble()};
+      }
+      std::sort(s.pts.begin(), s.pts.end(), [](const Point& a, const Point& b) { return a.date < b.date; });
+      if (!s.ok()) return;
+      m_national["ez"][int(Ind::Inflation)] = s;
+      applyNational(); emit updated();
     });
   }
   // Canada: Bank of Canada CPI-XFET y/y

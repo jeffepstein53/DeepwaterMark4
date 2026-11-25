@@ -40,6 +40,8 @@
 // PAIR COMPARATOR: seven rows (policy rate, headline CPI, core CPI, GDP q/q, unemployment, activity index, retail
 // sales y/y); "better" = higher, except unemployment (lower). The verdict names the currency that leads on more rows
 // (the score difference is shown beside it); a tie is "balanced". Rows missing for either side are not counted.
+// Two more rows, shown and never counted (the policy rate and the CPI already are): the real rate, policy rate less
+// headline CPI y/y and less core CPI y/y. Their difference is the carry after inflation.
 namespace fundamental {
 
 // ---------------------------------------------------------------- static metadata (not data)
@@ -165,9 +167,13 @@ Score scoreOne(const Inputs& in);   // absolute: score = rounded level, bias fro
 QVector<Score> scoreAll(const QList<Inputs>& inputs);
 
 // ---------------------------------------------------------------- pair comparator
+QString num(double v, int decimals);                    // never "-0.0"
+double realRate(const Inputs& in, bool core = false);   // policy rate less headline (core) CPI y/y, points; NaN when one is missing
+constexpr int kComparedRows = 7, kRealRows = 2;         // of a comparison: the counted rows, then the real rates
 struct CompareRow { QString label; double a = NAN, b = NAN; int better = 0; QString unit; int decimals = 2; QString note; };
 struct Comparison {
   QList<CompareRow> rows;    // better: +1 base better, -1 other better, 0 none / missing / equal
+  QString carry;             // "Carry: AUD yields 2.85 pt more than CHF after inflation"; empty when a real rate is missing
   int leadsA = 0, leadsB = 0, counted = 0;
   QString verdict;           // "Fundamentals favour AUD" / "Fundamentals balanced"
   int winner = 0;            // +1 base, -1 other, 0 balanced

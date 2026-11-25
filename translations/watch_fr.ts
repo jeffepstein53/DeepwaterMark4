@@ -1068,5 +1068,9 @@ Calculé par Deepwater à partir des bougies quotidiennes Yahoo.</translation>
         <source>COMMODITIES</source>
         <translation>MATIÈRES PREMIÈRES</translation>
     </message>
+    <message>
+        <source>No market pricing</source>
+        <translation>Pas de prix de marché</translation>
+    </message>
 </context>
 </TS>

@@ -10,6 +10,10 @@ QVariant value(const QString& key, const QVariant& def = {});
 void setValue(const QString& key, const QVariant& v);
 void remove(const QString& key);
 bool contains(const QString& key);
+// A secret (core/Secret): encrypted when it is written; one written in clear by an older version is encrypted on its
+// first reading. Never log the result.
+QString secretValue(const QString& key);
+bool setSecretValue(const QString& key, const QString& v);   // false: Windows could not encrypt it, nothing is written
 // API key saved by the user (key "keys.<name>"), empty if none. Never log the result.
 QString apiKey(const QString& name);
 bool isTestProfile();

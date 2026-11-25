@@ -99,6 +99,8 @@ struct CompareRow {
   QString label;                          // "Interest Rate"
   QStringList values;                     // formatted, one per column ("2.65%", "—")
   QStringList tips;                       // optional: period and source per value
+  QStringList dates;                      // optional: the period each value measures, short ("Sep 26"), drawn beside it
+  QList<bool> differs;                    // optional: another source gives another figure (macro/KeyFigures): amber, with ≠
 };
 class DataCompareCard : public SheetCard {
   Q_OBJECT

@@ -1122,5 +1122,153 @@
         <source>empty — add stories with + on the cards</source>
         <translation>vide — ajoutez des articles avec + sur les cartes</translation>
     </message>
+    <message>
+        <source>Previous revised to %1, first published %2 (%3).</source>
+        <translation>Précédent révisé à %1, publié d&apos;abord à %2 (%3).</translation>
+    </message>
+    <message>
+        <source>Sources disagree: %1 gives %2 here, against %3.</source>
+        <translation>Les sources divergent : %1 donne %2 ici, contre %3.</translation>
+    </message>
+    <message>
+        <source>forecast %1</source>
+        <translation>prévision %1</translation>
+    </message>
+    <message>
+        <source>previous %1</source>
+        <translation>précédent %1</translation>
+    </message>
+    <message>
+        <source>revised %1</source>
+        <translation>révisé %1</translation>
+    </message>
+    <message>
+        <source>Published with it: %1.</source>
+        <translation>Publié en même temps : %1.</translation>
+    </message>
+    <message>
+        <source>Full-time jobs</source>
+        <translation>Emplois à temps plein</translation>
+    </message>
+    <message>
+        <source>Part-time jobs</source>
+        <translation>Emplois à temps partiel</translation>
+    </message>
+    <message>
+        <source>ONS · consumer prices, y/y</source>
+        <translation>ONS · prix à la consommation, sur un an</translation>
+    </message>
+    <message>
+        <source>ONS · core consumer prices, y/y</source>
+        <translation>ONS · prix à la consommation sous-jacents, sur un an</translation>
+    </message>
+    <message>
+        <source>ONS · consumer prices, m/m</source>
+        <translation>ONS · prix à la consommation, sur un mois</translation>
+    </message>
+    <message>
+        <source>ONS · unemployment rate, three months</source>
+        <translation>ONS · taux de chômage, trois mois</translation>
+    </message>
+    <message>
+        <source>ONS · average weekly earnings, total pay, three months, y/y</source>
+        <translation>ONS · salaire hebdomadaire moyen, total, trois mois, sur un an</translation>
+    </message>
+    <message>
+        <source>ONS · monthly GDP, m/m</source>
+        <translation>ONS · PIB mensuel, sur un mois</translation>
+    </message>
+    <message>
+        <source>ONS · GDP, q/q</source>
+        <translation>ONS · PIB, sur un trimestre</translation>
+    </message>
+    <message>
+        <source>Statistics Canada · employment, monthly change</source>
+        <translation>Statistique Canada · emploi, variation mensuelle</translation>
+    </message>
+    <message>
+        <source>Statistics Canada · unemployment rate</source>
+        <translation>Statistique Canada · taux de chômage</translation>
+    </message>
+    <message>
+        <source>Statistics Canada · consumer prices, m/m (computed from the index)</source>
+        <translation>Statistique Canada · prix à la consommation, sur un mois (calculé sur l&apos;indice)</translation>
+    </message>
+    <message>
+        <source>Statistics Canada · consumer prices, y/y (computed from the index)</source>
+        <translation>Statistique Canada · prix à la consommation, sur un an (calculé sur l&apos;indice)</translation>
+    </message>
+    <message>
+        <source>Statistics Canada · GDP by industry, m/m (computed)</source>
+        <translation>Statistique Canada · PIB par industrie, sur un mois (calculé)</translation>
+    </message>
+    <message>
+        <source>ABS · consumer prices, y/y</source>
+        <translation>ABS · prix à la consommation, sur un an</translation>
+    </message>
+    <message>
+        <source>ABS · consumer prices, m/m</source>
+        <translation>ABS · prix à la consommation, sur un mois</translation>
+    </message>
+    <message>
+        <source>ABS · trimmed mean consumer prices, m/m</source>
+        <translation>ABS · prix à la consommation, moyenne tronquée, sur un mois</translation>
+    </message>
+    <message>
+        <source>ABS · trimmed mean consumer prices, y/y</source>
+        <translation>ABS · prix à la consommation, moyenne tronquée, sur un an</translation>
+    </message>
+    <message>
+        <source>ABS · employment, monthly change</source>
+        <translation>ABS · emploi, variation mensuelle</translation>
+    </message>
+    <message>
+        <source>ABS · unemployment rate</source>
+        <translation>ABS · taux de chômage</translation>
+    </message>
+    <message>
+        <source>ABS · wage price index, q/q</source>
+        <translation>ABS · indice des salaires, sur un trimestre</translation>
+    </message>
+    <message>
+        <source>ABS · GDP, q/q</source>
+        <translation>ABS · PIB, sur un trimestre</translation>
+    </message>
+    <message>
+        <source>US Census Bureau · advance retail sales, m/m (computed)</source>
+        <translation>US Census Bureau · ventes au détail, sur un mois (calculé)</translation>
+    </message>
+    <message>
+        <source>US Census Bureau · advance retail sales excluding motor vehicles, m/m (computed)</source>
+        <translation>US Census Bureau · ventes au détail hors automobiles, sur un mois (calculé)</translation>
+    </message>
+    <message>
+        <source>University of Michigan · consumer sentiment</source>
+        <translation>Université du Michigan · confiance des consommateurs</translation>
+    </message>
+    <message>
+        <source>University of Michigan · inflation expectations, one year</source>
+        <translation>Université du Michigan · anticipations d&apos;inflation à un an</translation>
+    </message>
+    <message>
+        <source>BLS · unemployment rate</source>
+        <translation>BLS · taux de chômage</translation>
+    </message>
+    <message>
+        <source>BLS · average hourly earnings, m/m (computed)</source>
+        <translation>BLS · salaire horaire moyen, sur un mois (calculé)</translation>
+    </message>
+    <message>
+        <source>BLS · CPI-U, y/y</source>
+        <translation>BLS · CPI-U, sur un an</translation>
+    </message>
+    <message>
+        <source>BLS · core CPI-U, y/y</source>
+        <translation>BLS · CPI-U sous-jacent, sur un an</translation>
+    </message>
+    <message>
+        <source>Same figure from a second source: %1.</source>
+        <translation>Même chiffre chez une deuxième source : %1.</translation>
+    </message>
 </context>
 </TS>

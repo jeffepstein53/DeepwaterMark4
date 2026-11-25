@@ -23,6 +23,10 @@ struct DataHeadline {
   Value actual;
   Value forecast;            // "expected", "estimate", "Forecast"
   Value previous;            // "prior", "Previous", "prelim"
+  Value revised;             // "Revised" / "Revision": the previous figure as revised
+  QString country;           // "US", "DE", "FR", "EZ"… (the euro covers several)
+  QString name;              // the headline's words before its figures ("US Core PCE Price Index YoY")
+  bool structured = false;   // FinancialJuice's fixed format, every figure labelled
 };
 std::optional<DataHeadline> parseDataHeadline(const QString& text);
 // Runs the parser on real headline samples; prints failures to stderr; returns the number of failures.

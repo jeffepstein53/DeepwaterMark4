@@ -28,6 +28,10 @@ struct Series {
   bool empty() const { return values.isEmpty(); }
 };
 
+// A past release's figure from its official series (empty Value when there is none), and the period before it as the
+// series shows it now when that differs from the calendar's "previous" (revised).
+struct OfficialActual { Value value; Value revised; QString note; };
+
 class History : public QObject {
   Q_OBJECT
 public:
@@ -37,12 +41,17 @@ public:
   void fetch(const Event& e, QObject* ctx, std::function<void(const Series&)> cb);
 
   // The official figure of a past release, when an official series publishes it: the observation of the period
-  // the release covers (monthly: the month before the release month; quarterly: the last quarter that ended
-  // before it), accepted only when the observation before it equals the calendar's "previous" at its precision
-  // (proves the period and the unit). cb gets an empty Value when there is none. Never estimates.
+  // the release covers (monthly: a fixed number of months before the release month, one for most; quarterly: the last
+  // quarter that ended before it), from a body downloaded after the release, accepted only when the observation before
+  // it is the calendar's "previous" (at its precision, or within the series' usual revision: proves the period and the
+  // unit). cb gets an empty Value when there is none. Never estimates.
   // note = "<publisher> official series\n<series, period = raw value>".
   bool canOfficial(const Event& e) const;
-  void officialActual(const Event& e, QObject* ctx, std::function<void(const Value& v, const QString& note)> cb);
+  void officialActual(const Event& e, QObject* ctx, std::function<void(const OfficialActual&)> cb);
+  // Full-time and part-time jobs behind an employment change, from the same office (AUD, CAD, USD).
+  bool hasOfficialDetails(const Event& e) const;
+  QString officialDetailsSource(const Event& e) const;
+  void officialDetails(const Event& e, QObject* ctx, std::function<void(const QList<Detail>&)> cb);
 private:
   History() = default;
   QHash<QString, Series> m_cache;                   // by definition id

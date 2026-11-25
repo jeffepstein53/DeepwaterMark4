@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Deepwater VERSION 0.4.3 LANGUAGES CXX)
+project(Deepwater VERSION 0.4.4 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -74,6 +74,7 @@ target_compile_definitions(Deepwater PRIVATE $<$<CXX_COMPILER_ID:MSVC>:NOMINMAX 
 if(WIN32)
   set_target_properties(Deepwater PROPERTIES WIN32_EXECUTABLE TRUE)
   target_link_libraries(Deepwater PRIVATE opengl32)   # Macro data's Landscape calls glClear / glClearColor directly
+  target_link_libraries(Deepwater PRIVATE crypt32 winmm)   # core/Secret: Windows encrypts the Myfxbook session (DPAPI); platform/WinNotify: the alerts' sound
   # Native parity with macOS (2026-11-22): Bank Research's PDF pages and printing (Qt PDF = PDFium, Qt Print Support;
   # platform/WinPdf.cpp), the Squawk pane's live player (Qt WebView's WebView2 backend; NativeTvWin.cpp), and the RBA /
   # RBNZ pictures read by Windows' own OCR through C++/WinRT (windowsapp; platform/WinOcr.cpp).
@@ -244,6 +245,13 @@ if(WIN32)
   set(CMAKE_INSTALL_BINDIR ".")
   include(GNUInstallDirs)
   install(TARGETS ${DW_WIN_TARGETS} RUNTIME DESTINATION .)
+  # the licences of Deepwater and of what it ships, beside the program
+  install(DIRECTORY licences/ DESTINATION licences)
+  install(FILES LICENSE DESTINATION licences RENAME Deepwater-AGPL-3.0.txt)
+  install(FILES third_party/pinets/LICENSE DESTINATION licences RENAME PineTS-LICENSE.txt)
+  install(FILES third_party/quickjs-ng/LICENSE DESTINATION licences RENAME QuickJS-ng-LICENSE.txt)
+  install(FILES third_party/miniz/LICENSE DESTINATION licences RENAME miniz-LICENSE.txt)
+  install(FILES docs/charts/NOTICE.md DESTINATION licences RENAME Indicateurs-NOTICE.md)
   qt_generate_deploy_app_script(TARGET Deepwater OUTPUT_SCRIPT DW_DEPLOY_SCRIPT NO_TRANSLATIONS)
   # Qt's deploy script puts the DLLs in QT_DEPLOY_BIN_DIR, which defaults to the CMAKE_INSTALL_BINDIR seen by
   # find_package(Qt6) ("bin"), where Windows wouldn't look for them: next to the exe instead.

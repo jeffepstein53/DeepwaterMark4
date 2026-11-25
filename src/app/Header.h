@@ -22,6 +22,7 @@ signals:
   void optionsRequested();
   void helpRequested();      // the ? left of the gear: the documentation (app/HelpWindow)
   void updateRequested();    // the update icon left of the ?: app/UpdateDialog
+  void checksRequested();    // the ⚠ left of it, shown while the data has an issue (app/Watchdog): Sources › Data Sources
   void menuRequested();
 protected:
   void paintEvent(QPaintEvent*) override;
@@ -36,10 +37,11 @@ private:
   QList<Hit> hits() const;
   int m_main = 0, m_sub = 0;
   int m_hoverMain = -1, m_hoverSub = -1;
-  bool m_hoverGear = false, m_hoverHelp = false, m_hoverUpdate = false;
+  bool m_hoverGear = false, m_hoverHelp = false, m_hoverUpdate = false, m_hoverCheck = false;
   QRectF gearRect() const;
   QRectF helpRect() const;
   QRectF updateRect() const;
+  QRectF checkRect() const;
   QList<int> m_lastSub;     // remembered sub-tab per main tab
   QTimer m_clock;
 };

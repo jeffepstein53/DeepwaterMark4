@@ -40,6 +40,7 @@ public:
     QUrl page, asset;             // the release on GitHub; this platform's file
     QString assetName;
     qint64 size = 0;
+    QByteArray sha256;             // the file's fingerprint as GitHub gives it (lower-case hex); empty: it gives none
     QDateTime published;
   };
   static Updater& instance();

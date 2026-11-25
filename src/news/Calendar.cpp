@@ -19,6 +19,7 @@
 #include <QLocale>
 #include <QTimeZone>
 #include <algorithm>
+#include <utility>
 
 namespace news {
 
@@ -70,6 +71,12 @@ QString formatLike(double v, const Value& like, bool sign) {
   return s + like.suffix;
 }
 
+// "54" next to a forecast of 52.4 reads 54.0
+static Value sameDecimals(const Value& v, const Value& like) {
+  if (!v.num() || !like.num() || v.suffix != like.suffix || v.decimals >= like.decimals) return v;
+  return parseValue(formatLike(v.v, like));
+}
+
 double Event::surprise() const {
   if (!actual.num() || !forecast.num()) return NAN;
   if (actual.suffix == forecast.suffix) return actual.v - forecast.v;
@@ -84,7 +91,7 @@ QString Event::surpriseText() const {
 }
 int Event::direction() const {
   if (!actual.num() || !previous.num()) return 0;
-  const double a = actual.scaled(), p = previous.scaled();
+  const double a = actual.scaled(), p = (revised.num() ? revised : previous).scaled();
   return a > p ? 1 : a < p ? -1 : 0;
 }
 bool Event::isSpeech() const {
@@ -116,6 +123,16 @@ static QJsonObject toJson(const Event& e) {
                 {"low", valueJson(e.low)}, {"high", valueJson(e.high)}, {"fsrc", e.forecastSource}};
   if (!e.actualSource.isEmpty()) { o["asrc"] = e.actualSource; o["aat"] = e.actualAt.toString(Qt::ISODate); }
   if (!e.actualDetail.isEmpty()) o["adet"] = e.actualDetail;
+  if (e.actualPub.isValid()) o["apub"] = e.actualPub.toString(Qt::ISODate);
+  if (e.quality >= 0) o["aq"] = e.quality;
+  if (!e.other.isEmpty()) o["oth"] = e.other;
+  if (!e.also.isEmpty()) o["also"] = QJsonArray::fromStringList(e.also);
+  if (e.revised.has()) { o["rev"] = valueJson(e.revised); o["rsrc"] = e.revisedSource; }
+  QJsonArray det;
+  for (const Detail& d : e.details)
+    det.append(QJsonObject{{"n", d.name}, {"a", d.actual}, {"f", d.forecast}, {"p", d.previous}, {"r", d.revised},
+                           {"s", d.source}, {"t", d.at.toString(Qt::ISODate)}});
+  if (!det.isEmpty()) o["det"] = det;
   QJsonArray banks;
   for (const auto& b : e.banks)
     banks.append(QJsonObject{{"bank", b.bank}, {"v", valueJson(b.value)}, {"src", b.source}, {"url", b.url},
@@ -139,6 +156,18 @@ static Event fromJson(const QJsonObject& o) {
   e.actualSource = o["asrc"].toString();
   e.actualDetail = o["adet"].toString();
   e.actualAt = QDateTime::fromString(o["aat"].toString(), Qt::ISODate);
+  e.actualPub = QDateTime::fromString(o["apub"].toString(), Qt::ISODate);
+  e.quality = o["aq"].toInt(-1);
+  e.other = o["oth"].toString();
+  for (const auto& v : o["also"].toArray()) e.also << v.toString();
+  e.revised = valueFrom(o["rev"]); e.revisedSource = o["rsrc"].toString();
+  e.actual = sameDecimals(e.actual, e.forecast.num() ? e.forecast : e.previous);
+  e.revised = sameDecimals(e.revised, e.previous);
+  for (const auto& v : o["det"].toArray()) {
+    const auto d = v.toObject();
+    e.details << Detail{d["n"].toString(), d["a"].toString(), d["f"].toString(), d["p"].toString(), d["r"].toString(),
+                        d["s"].toString(), QDateTime::fromString(d["t"].toString(), Qt::ISODate)};
+  }
   for (const auto& b : o["banks"].toArray()) {
     const auto bo = b.toObject();
     e.banks << BankForecast{bo["bank"].toString(), valueFrom(bo["v"]), bo["src"].toString(), bo["url"].toString(),
@@ -157,6 +186,11 @@ Calendar::Calendar() {
   m_poll.setSingleShot(true);
   m_poll.setTimerType(Qt::PreciseTimer);   // a coarse timer may be 5 % off: 15 s on 5 min, and it may fire early
   connect(&m_poll, &QTimer::timeout, this, [this] { fetchMyfxbook(); planPoll(); });
+  m_touch.setSingleShot(true); m_touch.setInterval(150);
+  connect(&m_touch, &QTimer::timeout, this, [this] {
+    const QSet<QDate> weeks = std::exchange(m_touched, {});
+    for (const QDate& w : weeks) { saveWeek(w); emit weekLoaded(w); }
+  });
   connect(this, &Calendar::weekLoaded, this, [this](const QDate& w) { if (w == currentWeek()) planPoll(); });   // release times known or moved
   // ForexFactory itself every 30 minutes while active (forecast revisions, time changes)
   auto* ff = new QTimer(this); ff->setInterval(30 * 60 * 1000);
@@ -254,6 +288,8 @@ void Calendar::saveWeek(const QDate& w) {
   f.commit();
 }
 
+void Calendar::touch(const QDate& w) { m_touched.insert(w); m_touch.start(); }
+
 // When ForexFactory last answered that next week's file does not exist. Its free export serves only the current week
 // (ff_calendar_nextweek.json answered 404 on Tuesday 2026-11-24, and no week was ever recorded ahead of time): asked at
 // each visit to next week, these misses counted against the export's low rate limit and could earn the whole calendar
@@ -338,6 +374,8 @@ void Calendar::fetchForexFactory(const QString& which) {
   });
 }
 
+static bool sameFigureText(const Value& a, const Value& b) { return a.suffix == b.suffix && std::abs(a.v - b.v) < 1e-9; }
+
 void Calendar::mergeWeek(const QDate& w, const QList<Event>& fresh) {
   QList<Event>& cur = m_weeks[w];
   QHash<QString, int> byKey, bySeriesDay;
@@ -352,6 +390,9 @@ void Calendar::mergeWeek(const QDate& w, const QList<Event>& fresh) {
     if (i >= 0) {   // keep what Deepwater recorded (actual, range, banks)
       const Event& old = cur[i];
       e.actual = old.actual; e.actualSource = old.actualSource; e.actualAt = old.actualAt; e.actualDetail = old.actualDetail;
+      e.actualPub = old.actualPub; e.quality = old.quality; e.other = old.other; e.also = old.also; e.details = old.details;
+      e.revised = old.revised; e.revisedSource = old.revisedSource;
+      if (e.revised.num() && e.previous.num() && sameFigureText(e.revised, e.previous)) { e.revised = {}; e.revisedSource.clear(); }   // the calendar caught up
       e.low = old.low; e.high = old.high; e.banks = old.banks;
     }
     out << e;
@@ -375,6 +416,14 @@ static const QStringList& countries() {
   return c;
 }
 
+static QString isoOfCountry(const QString& c) {
+  static const QHash<QString, QString> m{
+    {"united states", "US"}, {"euro area", "EZ"}, {"european union", "EZ"}, {"germany", "DE"}, {"france", "FR"},
+    {"italy", "IT"}, {"spain", "ES"}, {"united kingdom", "GB"}, {"japan", "JP"}, {"switzerland", "CH"},
+    {"canada", "CA"}, {"australia", "AU"}, {"new zealand", "NZ"}, {"china", "CN"}};
+  return m.value(c.toLower());
+}
+
 // Words of an event name after aliasing the two vocabularies (Myfxbook ↔ ForexFactory).
 static QSet<QString> nameTokens(QString s) {
   s = s.toLower();
@@ -384,12 +433,22 @@ static QSet<QString> nameTokens(QString s) {
     {"gdp growth rate", "gdp"}, {"interest rate decision", "rate"}, {"cash rate", "rate"},
     {"producer price index", "ppi"}, {"ppi input", "ppi input"}, {"unemployment change", "unemployment"},
     {"initial jobless claims", "unemployment claims"}, {"harmonised", "hicp"}, {"speech", "speaks"},
-    {"core inflation rate", "core cpi"}, {"balance of trade", "trade balance"}, {"flash", "flash"}};
+    {"core inflation rate", "core cpi"}, {"balance of trade", "trade balance"}, {"psnb", "public sector net borrowing"},
+    {"caseshiller", "cs composite hpi"}};
   for (const auto& [a, b] : alias) s.replace(a, b);
   static const QRegularExpression split(R"([^a-z0-9/]+)");
+  // whole words the wire shortens, and indicators both name their own way
+  static const QHash<QString, QString> word{{"service", "services"}, {"mfg", "manufacturing"}, {"comp", "composite"},
+    {"wkly", "weekly"}, {"prices", "price"}, {"sppi", "services ppi"}, {"ippi", "ppi"}, {"hpi", "house price index"},
+    {"preliminary", "prelim"}, {"nationwide", "national"}};
   QSet<QString> out;
   static const QSet<QString> stop{"german", "french", "italian", "spanish", "the", "of", "and", "s", "&"};
-  for (const auto& t : s.split(split, Qt::SkipEmptyParts)) if (!stop.contains(t)) out.insert(t);
+  for (const auto& t : s.split(split, Qt::SkipEmptyParts)) {
+    if (stop.contains(t)) continue;
+    const auto w = word.constFind(t);
+    if (w == word.cend()) out.insert(t);
+    else for (const auto& x : w->split(' ')) out.insert(x);
+  }
   return out;
 }
 
@@ -422,7 +481,12 @@ void Calendar::fetchMyfxbook() {
       return out.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"");
     };
     QHash<QString, std::pair<QString, Match>> best;   // event key → item name and match
-    QHash<QString, Value> values;
+    struct Figures { Value actual, previous, consensus; };
+    QHash<QString, Figures> values;
+    const auto figure = [](QString s) {   // "£-17.0B", "€27.5B": the currency sign is not part of the number
+      static const QRegularExpression sign(QStringLiteral("[\\x{00A3}\\x{20AC}\\x{00A5}$]"));
+      return parseValue(s.remove(sign));
+    };
     for (auto it = item.globalMatch(xml); it.hasNext();) {
       const QString body = it.next().captured(1);
       const QString t = unescape(title.match(body).captured(1)).trimmed();
@@ -435,17 +499,20 @@ void Calendar::fetchMyfxbook() {
       QString country, name;
       for (const auto& c : countries()) if (t.startsWith(c + " ")) { country = c; name = t.mid(c.size() + 1); break; }
       if (country.isEmpty()) continue;
-      const Value actual = parseValue(cells[4]);
+      const Value actual = figure(cells[4]), previous = figure(cells[2]), consensus = figure(cells[3]);
       if (!actual.has()) continue;
-      const Match m = matchActual(ccyOfCountry(country), when, name, parseValue(cells[2]), parseValue(cells[3]));
+      const Match m = matchActual(ccyOfCountry(country), isoOfCountry(country), when, name, previous, consensus);
       if (m.index < 0) continue;
       // one item per event and per poll, the best match (2026-11-16: "CAD Median CPI y/y" also took "Inflation
       // Rate YoY" and its actual flipped 2.0 % ↔ 3.1 % at every poll)
       const QString& k = m.key;
       if (const auto b = best.constFind(k); b != best.cend() && b->second.score >= m.score) continue;
-      best[k] = {name, m}; values[k] = actual;
+      best[k] = {name, m}; values[k] = Figures{actual, previous, consensus};
     }
-    for (auto it = best.cbegin(); it != best.cend(); ++it) applyActual(it->first, it->second, values.value(it.key()));
+    for (auto it = best.cbegin(); it != best.cend(); ++it) {
+      const Figures f = values.value(it.key());
+      applyActual(it->first, it->second, f.actual, f.previous, f.consensus);
+    }
     emit actualsPolled();
   });
 }
@@ -457,8 +524,10 @@ static double nameOverlap(const QSet<QString>& a, const QSet<QString>& b) {
   return double((x & y).size()) / std::max<qsizetype>(1, (x | y).size());
 }
 
-Calendar::Match Calendar::matchActual(const QString& ccy, const QDateTime& t, const QString& name, const Value& previous,
-                                      const Value& consensus) {
+static QString eventCountry(const Event& e);   // below, with the headlines
+
+Calendar::Match Calendar::matchActual(const QString& ccy, const QString& country, const QDateTime& t, const QString& name,
+                                      const Value& previous, const Value& consensus) {
   Match out;
   if (ccy.isEmpty()) return out;
   const QDate w = weekStart(t.toTimeZone(QTimeZone("America/New_York")).date());   // weeks are New York weeks
@@ -473,6 +542,7 @@ Calendar::Match Calendar::matchActual(const QString& ccy, const QDateTime& t, co
   for (int i = 0; i < it->size(); ++i) {
     const Event& e = (*it)[i];
     if (e.currency != ccy || std::abs(e.time.secsTo(t)) > 5 * 60) continue;
+    if (!country.isEmpty() && eventCountry(e) != country) continue;   // the euro's releases of several countries
     const QString eventPeriod = periodTag(e.title);
     if (!itemPeriod.isEmpty() && !eventPeriod.isEmpty() && itemPeriod != eventPeriod) continue;
     const QSet<QString> have = nameTokens(e.title);
@@ -488,22 +558,58 @@ Calendar::Match Calendar::matchActual(const QString& ccy, const QDateTime& t, co
   return out;
 }
 
-void Calendar::applyActual(const QString& name, const Match& m, const Value& actual) {
+namespace { bool sameFigure(const Value& a, const Value& b); bool hasStage(const Event& e); bool plausibleRevision(const Value& v, const Value& previous);
+            bool setRevised(Event& e, Value v, const QString& source); QString sourceLabel(const Event& e);   // below, with the headlines
+bool addAlso(Event& e, const QString& source) {   // a second source gave the figure shown
+  if (source.isEmpty() || source == sourceLabel(e) || e.also.contains(source)) return false;
+  e.also << source;
+  return true;
+}
+}
+
+void Calendar::applyActual(const QString& name, const Match& m, Value actual, Value previous, const Value& consensus) {
   auto it = m_weeks.find(m.week);
   if (it == m_weeks.end()) return;
   // by key: a listener of an earlier actual may have reloaded the week (indices move)
   const auto found = std::find_if(it->begin(), it->end(), [&](const Event& x) { return x.key == m.key; });
   if (found == it->end()) return;
   Event& e = *found;
-  if (e.actual.text == actual.text) return;
+  if (!adaptToEvent(actual, previous, e)) return;   // thousands against millions: not this figure
+  const int quality = int(sameFigure(previous, e.previous)) + int(sameFigure(consensus, e.forecast));
+  bool changed = false;
+  // its previous is the figure as revised since (the calendar keeps the first one), when it is the same series
+  if ((quality > 0 || e.actualSource == "Myfxbook") && !hasStage(e) && plausibleRevision(previous, e.previous) && !e.revised.has())
+    changed |= setRevised(e, previous, QStringLiteral("Myfxbook"));
+  const auto keep = [&](const QString& other) {
+    if (e.other != other) { e.other = other; changed = true; }
+    if (changed) touch(m.week);
+  };
+  if (e.actual.text == actual.text) {
+    if (e.actualSource == "Myfxbook" && e.quality != quality) { e.quality = quality; changed = true; }
+    if (e.actualSource != "Myfxbook") changed |= addAlso(e, QStringLiteral("Myfxbook"));
+    keep(e.other);
+    return;
+  }
+  if (e.actual.has() && e.actualSource != "Myfxbook") {
+    if (sameFigure(actual, e.actual)) {
+      changed |= addAlso(e, QStringLiteral("Myfxbook"));
+      keep(e.other.startsWith("Myfxbook ") ? QString() : e.other);
+      return;
+    }
+    // an official series stands; a headline that repeats the calendar's own figures stands against an item that
+    // repeats none (2026-11-19: the euro area's unadjusted current account)
+    if (e.quality == 9 || (quality == 0 && e.quality > 0)) { keep("Myfxbook " + actual.text); return; }
+    e.other = sourceLabel(e) + " " + e.actual.text;
+  }
   static const QString kDetail = QStringLiteral("Myfxbook economic calendar RSS: ");
   // an actual taken from a Myfxbook item whose name matches the event better is kept (the better item may have left
   // the feed while a looser one is still listed)
   if (e.actualSource == "Myfxbook" && e.actualDetail.startsWith(kDetail)) {
     const QSet<QString> have = nameTokens(e.title);
-    if (nameOverlap(nameTokens(e.actualDetail.mid(kDetail.size())), have) > nameOverlap(nameTokens(name), have)) return;
+    if (nameOverlap(nameTokens(e.actualDetail.mid(kDetail.size())), have) > nameOverlap(nameTokens(name), have)) { keep(e.other); return; }
   }
-  e.actual = actual; e.actualSource = "Myfxbook"; e.actualAt = QDateTime::currentDateTimeUtc();
+  e.actual = actual; e.actualSource = "Myfxbook"; e.actualAt = QDateTime::currentDateTimeUtc(); e.also.clear();
+  e.actualPub = {}; e.quality = quality;
   e.actualDetail = kDetail + name;
   saveWeek(m.week);
   emit actualArrived(e);
@@ -638,6 +744,96 @@ QStringList Calendar::describe(const Event& e) {
 }
 
 // ------------------------------------------------------------------------------------------------ actuals: headlines
+namespace {
+// Words that say which estimate of a figure it is, not which figure.
+const QSet<QString>& stageWords() {
+  static const QSet<QString> w{"flash", "prelim", "preliminary", "final", "revised", "advance", "second", "2nd", "3rd", "estimate"};
+  return w;
+}
+// Words too common to tie a headline to an event.
+const QSet<QString>& genericWords() {
+  static const QSet<QString> w{"index", "price", "sales", "change", "rate", "nsa", "sa", "yr", "total", "new", "net", "y/y", "m/m",
+                               "q/q", "3m/3m", "weekly", "ex", "fed", "us", "overall", "business", "consumer", "flash", "prelim",
+                               "preliminary", "final", "revised", "advance", "second", "2nd", "3rd", "estimate", "core"};
+  return w;
+}
+bool hasStage(const Event& e) {
+  static const QRegularExpression re(R"(\b(prelim|final|revised|advance|second estimate)\b)", QRegularExpression::CaseInsensitiveOption);
+  return re.match(e.title).hasMatch();
+}
+// The two figures are the same number at the coarser of their precisions.
+bool sameFigure(const Value& a, const Value& b) {
+  if (!a.num() || !b.num() || (a.suffix == "%") != (b.suffix == "%")) return false;
+  const double unit = std::max(mult(a.suffix) / std::pow(10.0, a.decimals), mult(b.suffix) / std::pow(10.0, b.decimals));
+  return std::abs(a.scaled() - b.scaled()) <= 0.5 * unit + 1e-9;
+}
+// v in the unit of `like` (0.676M → 676K), with the digits it had.
+Value convertLike(const Value& v, const Value& like) {
+  if (!v.num() || v.suffix == like.suffix || like.suffix.isEmpty() || like.suffix == "%" || v.suffix == "%") return v;
+  Value conv = like;
+  const int shift = int(std::round(std::log10(mult(like.suffix) / mult(v.suffix))));
+  conv.decimals = std::max(0, v.decimals + shift);
+  return parseValue(formatLike(v.scaled() / mult(like.suffix), conv));
+}
+QString sourceLabel(const Event& e) {
+  if (e.actualSource.endsWith(" headline")) return e.actualSource.chopped(9);
+  if (e.actualSource.endsWith(" official series")) return e.actualSource.chopped(16);
+  return e.actualSource;
+}
+// A previous figure close enough to the calendar's to be its revision, not another series'.
+bool plausibleRevision(const Value& v, const Value& previous) {
+  if (!v.num() || !previous.num() || (v.suffix == "%") != (previous.suffix == "%")) return false;
+  const double d = std::abs(v.scaled() - previous.scaled());
+  if (previous.suffix == "%") return d <= 0.5 + 1e-9;
+  return d <= 0.10 * std::abs(previous.scaled()) + 1e-9;
+}
+bool setRevised(Event& e, Value v, const QString& source) {
+  v = sameDecimals(convertLike(v, e.previous), e.previous);
+  if (!v.num() || sameFigure(v, e.previous) || (e.revised.has() && e.revised.text == v.text)) return false;
+  e.revised = v; e.revisedSource = source;
+  return true;
+}
+}
+
+bool adaptToEvent(Value& actual, Value& previous, const Event& e) {
+  const Value& like = e.previous.num() ? e.previous : e.forecast;
+  if (!actual.num() || !like.num()) return true;
+  // the feed's unit is wrong when its previous has the calendar's digits under another suffix ("676.0M" for 676K)
+  if (previous.num() && e.previous.num() && previous.suffix != e.previous.suffix && previous.suffix == actual.suffix &&
+      previous.suffix != "%" && e.previous.suffix != "%" && std::abs(previous.v - e.previous.v) <= 0.5 * std::pow(10.0, -e.previous.decimals)) {
+    const auto relabel = [&](Value& v) { Value u = v; u.suffix = e.previous.suffix; v = parseValue(formatLike(v.v, u)); };
+    relabel(actual); relabel(previous);
+  }
+  // opposite sign convention (net borrowing as a negative balance)
+  if (previous.num() && e.previous.num() && previous.v != 0 && previous.suffix == e.previous.suffix &&
+      sameFigure(Value{{}, -previous.v, previous.suffix, previous.decimals}, e.previous) && !sameFigure(previous, e.previous)) {
+    actual = parseValue(formatLike(-actual.v, actual)); previous = parseValue(formatLike(-previous.v, previous));
+  }
+  // thousands against millions and no explanation: not the same figure
+  if (actual.suffix != like.suffix && actual.suffix != "%" && like.suffix != "%" && actual.v != 0 && like.v != 0) {
+    const double ratio = std::abs(actual.scaled() / like.scaled());
+    if (ratio > 100 || ratio < 0.01) return false;
+  }
+  actual = sameDecimals(actual, e.forecast.num() ? e.forecast : e.previous);
+  // "203.0K" for a series published in whole thousands
+  if (actual.decimals > like.decimals && actual.suffix == like.suffix) {
+    const double f = std::pow(10.0, like.decimals);
+    if (std::abs(actual.v * f - std::round(actual.v * f)) < 1e-9) {
+      Value u = actual; u.decimals = like.decimals;
+      actual = parseValue(formatLike(actual.v, u));
+    }
+  }
+  return true;
+}
+
+// "German Flash Services PMI" → DE; a euro-area title → EZ; other currencies have one country.
+static QString eventCountry(const Event& e) {
+  if (e.currency != "EUR") return e.currency.left(2);
+  static const QList<QPair<QString, QString>> c{{"German", "DE"}, {"French", "FR"}, {"Italian", "IT"}, {"Spanish", "ES"}, {"Belgian", "BE"}};
+  for (const auto& [word, iso] : c) if (e.title.startsWith(word, Qt::CaseInsensitive)) return iso;
+  return QStringLiteral("EZ");
+}
+
 bool Calendar::applyHeadline(const DataHeadline& h, const QDateTime& t, const QString& source, const QString& text) {
   if (h.currency.isEmpty() || !h.actual.num()) return false;
   const QDate w = weekStart(t.toTimeZone(QTimeZone("America/New_York")).date());
@@ -647,22 +843,28 @@ bool Calendar::applyHeadline(const DataHeadline& h, const QDateTime& t, const QS
   static const QSet<QString> periods{"y/y", "m/m", "q/q", "3m/3m"};
   static const QSet<QString> qualifiers{"core", "trimmed", "median", "common", "services", "manufacturing", "composite",
                                         "construction", "import", "export", "flash", "final"};
+  static const QSet<QString> benign{"index", "global", "hcob", "p", "sa", "fed"};   // names of the survey's publisher
   QSet<QString> want = nameTokens(h.indicator);
   for (const auto& p : periods) want.remove(p);
-  int best = -1; double bestScore = 0; bool tie = false;
+  int best = -1, bestAgree = 0; double bestScore = 0; bool tie = false;
+  int loose = -1; bool severalLoose = false;
+  int related = -1; double relatedScore = 0;
   for (int i = 0; i < it->size(); ++i) {
     const Event& e = (*it)[i];
-    if (e.currency != h.currency || e.actual.has()) continue;
+    if (e.currency != h.currency || (!h.country.isEmpty() && eventCountry(e) != h.country)) continue;
     const qint64 dt = e.time.secsTo(t);                          // headline after the release time
     if (dt < -5 * 60 || dt > 20 * 60) continue;
-    if (!h.period.isEmpty() && periods.contains(h.period) && !e.periodRaw.isEmpty() && h.period != e.periodRaw) continue;
     QSet<QString> have = nameTokens(e.title);
     for (const auto& p : periods) have.remove(p);
+    const double score = double((want & have).size()) / std::max<qsizetype>(1, (want | have).size());
+    if (!((want - genericWords()) & (have - genericWords())).isEmpty() && !e.isSpeech()) {
+      const double s = score + int(e.impact) * 0.001;            // same overlap: the event that matters more
+      if (s > relatedScore) { relatedScore = s; related = i; }
+    }
+    if (!h.period.isEmpty() && periods.contains(h.period) && !e.periodRaw.isEmpty() && h.period != e.periodRaw) continue;
     bool qualOk = true;
     for (const auto& q : qualifiers) if (want.contains(q) != have.contains(q) && (q != "flash" && q != "final")) qualOk = false;
-    if (!qualOk) continue;
-    const double score = double((want & have).size()) / std::max<qsizetype>(1, (want | have).size());
-    if (score < 0.5) continue;
+    if (!qualOk || score < 0.2) continue;
     // unit and scale must agree with the calendar's figures
     const Value& like = e.forecast.num() ? e.forecast : e.previous;
     if (!like.num()) continue;
@@ -675,24 +877,81 @@ bool Calendar::applyHeadline(const DataHeadline& h, const QDateTime& t, const QS
       const double f = std::pow(10.0, std::min(b.decimals, std::max(a.decimals, 0) + (pct ? 0 : 3)));
       return std::abs(std::round(av * f) / f - b.v) <= 0.5 / f + 1e-9;
     };
-    const bool agree = same(h.forecast, e.forecast) || same(h.previous, e.previous);
-    if (!agree) continue;
-    if (std::abs(score - bestScore) < 1e-9 && best >= 0) tie = true;
-    if (score > bestScore + 1e-9) { bestScore = score; best = i; tie = false; }
+    const int agree = int(same(h.forecast, e.forecast)) + int(same(h.previous, e.previous));
+    // the calendar and the wire name a few surveys differently (CBI realized sales / distributive trades): the
+    // calendar's previous and no other release of that country at that moment make up for it
+    bool alone = true;
+    for (const Event& o : *it) if (&o != &e && o.currency == e.currency && eventCountry(o) == eventCountry(e) && std::abs(o.time.secsTo(e.time)) < 60) alone = false;
+    const bool named = score >= 0.5 || agree == 2 || (alone && same(h.previous, e.previous) && h.previous.v != 0);
+    if (agree > 0 && named) {
+      const double s = score + 0.1 * (agree - 1);
+      if (std::abs(s - bestScore) < 1e-9 && best >= 0) tie = true;
+      if (s > bestScore + 1e-9) { bestScore = s; best = i; bestAgree = agree; tie = false; }
+      continue;
+    }
+    // same name in full, stage words apart, and a previous of the same size: the two surveys of economists differ
+    const QSet<QString> a = have - stageWords() - benign, b = want - stageWords() - benign;
+    const double scale = std::max(std::abs(e.previous.v), 1e-9);
+    const bool near = h.previous.num() && e.previous.num() && h.previous.suffix == e.previous.suffix &&
+                      std::abs(h.previous.v - e.previous.v) <= (pct ? 1.0 : 0.10 * scale);
+    const bool samePeriod = e.periodRaw.isEmpty() ? true : h.period == e.periodRaw;
+    if (h.structured && agree == 0 && !a.isEmpty() && a == b && near && samePeriod) {
+      if (loose >= 0) severalLoose = true;
+      loose = i;
+    }
   }
-  if (best < 0 || tie) return false;
-  Event& e = (*it)[best];
+  const bool ambiguous = best >= 0 ? tie : severalLoose;
+  const int idx = best >= 0 ? best : loose;
+  if (ambiguous) return false;
+  if (idx < 0) {
+    // no event of its own: a figure of the same release
+    static const QRegularExpression auction(R"(\b(yield|bid-to-cover|awarded|auction)\b)", QRegularExpression::CaseInsensitiveOption);
+    if (!h.structured || related < 0 || auction.match(h.name).hasMatch()) return false;
+    Event& e = (*it)[related];
+    Detail d{h.name, h.actual.text, h.forecast.text, h.previous.text, h.revised.text, source, t};
+    for (Detail& o : e.details) {
+      if (o.name != d.name) continue;
+      if (o.at.secsTo(t) < 0 || (o.at.secsTo(t) == 0 && o.actual == d.actual)) return false;
+      o = d;                                   // the wire corrected itself (Core PCE y/y, 2026-11-25: 3.1% then 3.3%)
+      touch(w);
+      return false;
+    }
+    if (e.details.size() >= 12) return false;
+    e.details << d;
+    touch(w);
+    return false;
+  }
+  Event& e = (*it)[idx];
   const Value& like = e.forecast.num() ? e.forecast : e.previous;
-  Value a = h.actual;
-  if (a.suffix != like.suffix && !like.suffix.isEmpty() && like.suffix != "%") {   // 0.676M ↔ 676K
-    Value conv = like;
-    const double v = h.actual.scaled() / mult(like.suffix);
-    const int shift = int(std::round(std::log10(mult(like.suffix) / mult(h.actual.suffix))));
-    conv.decimals = std::max(0, h.actual.decimals + shift);
-    a = parseValue(formatLike(v, conv));
+  const Value a = sameDecimals(convertLike(h.actual, like), like);
+  bool changed = false, arrived = false;
+  const QString label = source + " headline";
+  const auto take = [&] {
+    e.actual = a; e.actualSource = label; e.actualDetail = text; e.actualPub = t; e.also.clear();
+    e.quality = best >= 0 ? bestAgree : 0;
+    e.actualAt = QDateTime::currentDateTimeUtc();
+    changed = arrived = true;
+  };
+  if (!e.actual.has()) take();
+  else if (!e.actual.num() || (like.num() && e.actual.num() && e.actual.v != 0 && like.v != 0 &&
+           (std::abs(e.actual.scaled() / like.scaled()) > 100 && std::abs(a.scaled() / like.scaled()) <= 100))) take();   // unreadable, or a unit off
+  else if (e.actualSource == label) {
+    if (e.actualPub.isValid() && t > e.actualPub && a.text != e.actual.text && best >= 0) take();   // the wire corrected itself
+  } else if (sameFigure(a, e.actual)) {
+    if (!e.other.isEmpty() && e.other.startsWith(source + " ")) { e.other.clear(); changed = true; }
+    changed |= addAlso(e, source);
+  } else if (best >= 0) {
+    const QString other = source + " " + a.text;
+    if (e.quality == 0 && bestAgree > 0 && e.actualSource == "Myfxbook") { e.other = "Myfxbook " + e.actual.text; take(); }
+    else if (e.other != other) { e.other = other; changed = true; }
   }
-  e.actual = a; e.actualSource = source + " headline"; e.actualDetail = text;
-  e.actualAt = QDateTime::currentDateTimeUtc();
+  // the previous as revised: stated, or the wire's own previous when the calendar still shows the first one
+  if (h.revised.num()) changed |= setRevised(e, h.revised, source);
+  else if (h.structured && h.previous.num() && !hasStage(e) && e.actual.has() && sameFigure(a, e.actual) &&
+           plausibleRevision(h.previous, e.previous))
+    changed |= setRevised(e, h.previous, source);
+  if (!changed) return false;
+  if (!arrived) { touch(w); return false; }
   saveWeek(w);
   emit actualArrived(e);
   emit weekLoaded(w);
@@ -703,23 +962,92 @@ bool Calendar::applyHeadline(const DataHeadline& h, const QDateTime& t, const QS
 void Calendar::fillOfficial(const QDate& w) {
   readWeek(w);
   const QDateTime now = QDateTime::currentDateTimeUtc();
-  for (const Event& e : m_weeks.value(w)) {
-    if (e.actual.has() || e.time > now || !History::instance().canOfficial(e)) continue;
-    const QString key = e.key;
-    History::instance().officialActual(e, this, [this, w, key](const Value& v, const QString& note) {
-      if (!v.has()) return;
+  auto& history = History::instance();
+  for (const Event& ev : m_weeks.value(w)) {
+    if (ev.time > now || ev.time < now.addDays(-21)) continue;
+    const QString key = ev.key;
+    const auto found = [this, w, key]() -> Event* {
       auto it = m_weeks.find(w);
-      if (it == m_weeks.end()) return;
-      for (Event& e : *it) {
-        if (e.key != key || e.actual.has()) continue;
-        e.actual = v; e.actualSource = note.section('\n', 0, 0);
-        e.actualDetail = note.section('\n', 1); e.actualAt = QDateTime::currentDateTimeUtc();
+      if (it != m_weeks.end()) for (Event& e : *it) if (e.key == key) return &e;
+      return nullptr;
+    };
+    if (!ev.actual.has() && history.canOfficial(ev))
+      history.officialActual(ev, this, [this, w, found](const OfficialActual& o) {
+        Event* e = o.value.has() ? found() : nullptr;
+        if (!e || e->actual.has()) return;
+        e->actual = o.value; e->actualSource = o.note.section('\n', 0, 0);
+        e->actualDetail = o.note.section('\n', 1); e->actualAt = QDateTime::currentDateTimeUtc();
+        e->quality = 9; e->also.clear();
+        if (o.revised.has()) setRevised(*e, o.revised, sourceLabel(*e));
         saveWeek(w);
-        emit actualArrived(e);
+        emit actualArrived(*e);
         emit weekLoaded(w);
-      }
-    });
+      });
+    // a figure a wire or a feed gave: the statistics office's own series is its second source
+    static QSet<QString> confirmed;   // compared once (the series kept its figure): not asked again this session
+    if (ev.actual.num() && ev.quality != 9 && int(ev.impact) >= int(Impact::Medium) && ev.time > now.addDays(-8) &&
+        !confirmed.contains(key) && history.canOfficial(ev)) {
+      Event bare = ev;
+      bare.actual = {};
+      history.officialActual(bare, this, [this, w, found](const OfficialActual& o) {
+        Event* e = o.value.has() ? found() : nullptr;
+        if (!e || !e->actual.num() || e->quality == 9) return;
+        confirmed.insert(e->key);
+        QString office = o.note.section('\n', 0, 0);
+        office.remove(QStringLiteral(" official series"));
+        bool changed = false;
+        if (sameFigure(o.value, e->actual)) {
+          changed = addAlso(*e, office);
+          if (e->other.startsWith(office + " ")) { e->other.clear(); changed = true; }
+        } else if (const QString other = office + " " + o.value.text; e->other != other) { e->other = other; changed = true; }
+        if (changed) touch(w);
+      });
+    }
+    if (history.hasOfficialDetails(ev)) {
+      bool have = false;
+      for (const Detail& d : ev.details) have |= d.source == history.officialDetailsSource(ev);
+      if (!have)
+        history.officialDetails(ev, this, [this, w, found](const QList<Detail>& list) {
+          Event* e = list.isEmpty() ? nullptr : found();
+          if (!e) return;
+          for (const Detail& d : list) {
+            bool known = false;
+            for (const Detail& o : e->details) known |= o.name == d.name;
+            if (!known) e->details << d;
+          }
+          touch(w);
+        });
+    }
   }
+}
+
+QList<Event> Calendar::missingResults(int lateSec, const QDateTime& nowUtc) const {
+  QList<Event> out;
+  const QDateTime now = nowUtc.isValid() ? nowUtc : QDateTime::currentDateTimeUtc();
+  for (const QList<Event>& week : m_weeks)
+    for (const Event& e : week) {
+      if (e.actual.has() || e.allDay || e.impact == Impact::Holiday || int(e.impact) < int(Impact::Medium) || e.isSpeech()) continue;
+      if (!e.forecast.num() && !e.previous.num()) continue;   // a text, not a figure
+      const qint64 age = e.time.secsTo(now);
+      if (age >= lateSec && age <= 24 * 3600) out << e;
+    }
+  return out;
+}
+
+// The statistics offices answer within minutes of a release: asked 2, 5, 10, 20 and 40 minutes after each one that no
+// headline and no feed has filled by then.
+void Calendar::planOfficial() {
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  QDateTime next;
+  for (const Event& e : m_weeks.value(currentWeek())) {
+    if (e.actual.has() || e.allDay || !History::instance().canOfficial(e)) continue;
+    for (const int s : {120, 300, 600, 1200, 2400}) {
+      const QDateTime at = e.time.addSecs(s);
+      if (at > now.addSecs(1) && (!next.isValid() || at < next)) { next = at; break; }
+    }
+  }
+  if (next.isValid()) m_official.start(int(std::min<qint64>(now.msecsTo(next), 24LL * 3600 * 1000)));
+  else m_official.stop();
 }
 
 void Calendar::startBackground() {
@@ -730,10 +1058,14 @@ void Calendar::startBackground() {
   buildReleaseIndex();                    // ready by the time a row is expanded
   const QDate cur = currentWeek();
   load(cur);
+  load(cur.addDays(-7));                  // last week's figures published while Deepwater was closed
   connect(this, &Calendar::weekLoaded, this, [this](const QDate& w) {
     static QSet<QDate> done;              // official series once per week and session (cached 3 h by net::)
     if (w >= currentWeek().addDays(-7) && w <= currentWeek() && !done.contains(w) && hasData(w)) { done.insert(w); fillOfficial(w); }
+    if (w == currentWeek()) planOfficial();
   });
+  m_official.setSingleShot(true);
+  connect(&m_official, &QTimer::timeout, this, [this] { fillOfficial(currentWeek()); planOfficial(); });
   auto* hourly = new QTimer(this);
   hourly->setInterval(60 * 60 * 1000);
   connect(hourly, &QTimer::timeout, this, [this] { fillOfficial(currentWeek()); });
@@ -747,6 +1079,32 @@ QString actualSourceText(const Event& e) {
   if (s.endsWith(" headline")) return QCoreApplication::translate("news", "%1 headline").arg(s.chopped(9));
   return s;
 }
+QString revisedText(const Event& e) {
+  if (!e.revised.has()) return {};
+  return QCoreApplication::translate("news", "Previous revised to %1, first published %2 (%3).").arg(e.revised.text, e.previous.text, e.revisedSource);
+}
+QString sourceOf(const Event& e) { return sourceLabel(e); }
+QString alsoText(const Event& e) {
+  if (e.also.isEmpty() || !e.actual.has()) return {};
+  return QCoreApplication::translate("news", "Same figure from a second source: %1.").arg(e.also.join(", "));
+}
+QString otherText(const Event& e) {
+  if (e.other.isEmpty()) return {};
+  return QCoreApplication::translate("news", "Sources disagree: %1 gives %2 here, against %3.").arg(sourceLabel(e), e.actual.text, e.other);
+}
+QString detailsText(const Event& e) {
+  QStringList parts;
+  for (const Detail& d : e.details) {
+    QStringList in;
+    if (!d.forecast.isEmpty()) in << QCoreApplication::translate("news", "forecast %1").arg(d.forecast);
+    if (!d.previous.isEmpty()) in << QCoreApplication::translate("news", "previous %1").arg(d.previous);
+    if (!d.revised.isEmpty()) in << QCoreApplication::translate("news", "revised %1").arg(d.revised);
+    parts << QCoreApplication::translate("news", d.name.toUtf8().constData()) + " " + d.actual + (in.isEmpty() ? QString() : " (" + in.join(", ") + ")");
+  }
+  if (parts.isEmpty()) return {};
+  return QCoreApplication::translate("news", "Published with it: %1.").arg(parts.join(" · "));
+}
+
 QString actualDetailText(const Event& e) {
   QString d = e.actualDetail;
   if (d.isEmpty()) return d;

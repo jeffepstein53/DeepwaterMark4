@@ -2,6 +2,7 @@
 #include "ui/Kit.h"
 #include "pages/economy/EcoKit.h"
 #include "macro/CentralBanks.h"
+#include "macro/KeyFigures.h"
 #include "macro/Registry.h"
 #include "app/Pages.h"
 #include "ui/Theme.h"
@@ -247,11 +248,11 @@ public:
       p.drawPixmap(QPointF(L() + 11, cy - 7), macro::flag(b.iso2, QSize(20, 14)));
       const QFont cf = eco::sans(14, QFont::Bold);
       p.setFont(cf); p.setPen(C("#e7e1cd"));
-      p.drawText(QPointF(L() + 38, cy - 1), b.code);
+      p.drawText(QPointF(L() + 38, cy - 1), b.shownCode());
       p.setFont(eco::mono(10)); p.setPen(C("#736b4e"));
-      const QString nm = b.id == "SNB" || b.id == "RBA" || b.id == "RBNZ" || b.id == "ECB" ? b.code : trData(b.name);
+      const QString nm = b.id == "SNB" || b.id == "RBA" || b.id == "RBNZ" || b.id == "ECB" ? b.shownCode() : trData(b.name);
       p.drawText(QPointF(L() + 38, cy + 12), QFontMetricsF(eco::mono(10)).elidedText(nm, Qt::ElideRight, rateLeft - L() - 38));
-      qreal px = L() + 38 + QFontMetricsF(cf).horizontalAdvance(b.code) + 8;
+      qreal px = L() + 38 + QFontMetricsF(cf).horizontalAdvance(b.shownCode()) + 8;
       const QString act = b.action();
       if (!act.isEmpty()) {
         const QString at = QCoreApplication::translate("economy", act.toUtf8().constData());   // Hike / Cut / Hold
@@ -263,7 +264,7 @@ public:
       }
       p.setFont(eco::mono(15, QFont::Bold)); p.setPen(eco::cyan());
       p.drawText(QRectF(xR - 200, cy - 14, 200, 18), Qt::AlignRight | Qt::AlignVCenter,
-                 std::isfinite(b.rate) ? QString::number(b.rate, 'f', 2) + "%" : QString("—"));
+                 std::isfinite(b.rate) ? differs(b, "Policy rate") + QString::number(b.rate, 'f', 2) + "%" : QString("—"));
       p.setFont(eco::mono(9)); p.setPen(C("#4b4633"));
       p.drawText(QRectF(xR - 200, cy + 3, 200, 12), Qt::AlignRight | Qt::AlignVCenter, rateSub(b));
       // band 2
@@ -271,7 +272,7 @@ public:
       const MeetingDate nm2 = b.nextMeeting();
       p.setFont(eco::mono(13)); p.setPen(C("#c9c5b5"));
       p.drawText(QRectF(L() + 11, cy2 - 15, c0 - L() - 11, 18), Qt::AlignLeft | Qt::AlignVCenter,
-                 nm2.decision.isValid() ? shortDate(nm2.first) + (nm2.verified ? "" : "*") : QString("—"));
+                 nm2.decision.isValid() ? shortDate(nm2.decision) + (nm2.verified ? "" : "*") : QString("—"));
       if (nm2.decision.isValid()) {
         const int d = b.daysToNext();
         const QString t = d <= 0 ? QCoreApplication::translate("economy", "today") : QCoreApplication::translate("economy", "in %1d").arg(d);
@@ -292,7 +293,7 @@ public:
         continue;
       }
       p.setFont(eco::mono(13, QFont::Bold)); p.setPen(b.impliedBp >= 0 ? eco::cyan() : eco::red());
-      p.drawText(QRectF(colR(0) - 120, cy2 - 14, 120, 18), Qt::AlignRight | Qt::AlignVCenter, eco::signedBp(b.impliedBp));
+      p.drawText(QRectF(colR(0) - 120, cy2 - 14, 120, 18), Qt::AlignRight | Qt::AlignVCenter, differs(b, "Odds") + eco::signedBp(b.impliedBp));
       const double wk = b.impliedBp - b.impliedBpWeekAgo;
       p.setFont(eco::mono(9)); p.setPen(!std::isfinite(wk) ? C("#4b4633") : wk >= 0 ? C("#3fc7b4") : eco::red());
       p.drawText(QRectF(colR(0) - 120, cy2 + 3, 120, 12), Qt::AlignRight | Qt::AlignVCenter,
@@ -314,8 +315,19 @@ public:
         else if (bias == "DOVISH") eco::pill(p, br, bt, C("#2a0d0b"), C("#e0786f"), false, 3);
         else eco::pill(p, br, bt, C("#171712"), C("#9e9f9e"), false, 3);
       }
-      m_infos.append({QRectF(c0, cy2 - 20, cw, 40), b.pricingSource + (b.pricingNote.isEmpty() ? QString() : ". " + b.pricingNote)});
+      m_infos.append({QRectF(c0, cy2 - 20, cw, 40), b.pricingSource + (b.pricingNote.isEmpty() ? QString() : ". " + b.pricingNote) + checkedOdds(b)});
     }
+  }
+
+  // what the other sources give for the same figure (macro/KeyFigures): ≠ before ours when one differs
+  static QString differs(const Bank& b, const char* figure) {
+    return macro::checkDiffers(b.currency, QLatin1String(figure)) ? QStringLiteral("≠ ") : QString();
+  }
+  static QString checkedOdds(const Bank& b) {
+    const macro::check::Item* it = macro::KeyFigures::instance().item(b.currency, QStringLiteral("Odds"));
+    if (!it || it->others.isEmpty()) return {};
+    const QString line = macro::checkLine(*it);
+    return "\n" + (line.isEmpty() ? QString() : line + "\n") + QCoreApplication::translate("checks", "Other sources: %1").arg(macro::checkOthers(*it));
   }
 
   void paintTable(QPainter& p) {
@@ -339,7 +351,7 @@ public:
       for (const Bank& b : banks) {
         subW = std::max({subW, sf.horizontalAdvance(rateSub(b)), rf.horizontalAdvance("00.00%")});
         const MeetingDate nm = b.nextMeeting();
-        if (nm.decision.isValid()) meetW = std::max(meetW, mf.horizontalAdvance(shortDate(nm.first) + "*"));
+        if (nm.decision.isValid()) meetW = std::max(meetW, mf.horizontalAdvance(shortDate(nm.decision) + "*"));
       }
     }
     qreal biasW = 62;
@@ -378,9 +390,9 @@ public:
       const qreal cy = r.center().y();
       p.drawPixmap(QPointF(L() + 11, cy - 7), macro::flag(b.iso2, QSize(20, 14)));
       p.setFont(eco::sans(14, QFont::Bold)); p.setPen(C("#e7e1cd"));
-      p.drawText(QPointF(L() + 38, cy - 1), b.code);
+      p.drawText(QPointF(L() + 38, cy - 1), b.shownCode());
       p.setFont(eco::mono(10)); p.setPen(C("#736b4e"));
-      p.drawText(QPointF(L() + 38, cy + 12), b.id == "SNB" || b.id == "RBA" || b.id == "RBNZ" || b.id == "ECB" ? b.code : trData(b.name));
+      p.drawText(QPointF(L() + 38, cy + 12), b.id == "SNB" || b.id == "RBA" || b.id == "RBNZ" || b.id == "ECB" ? b.shownCode() : trData(b.name));
       // action pill
       const QString act = b.action();
       if (!act.isEmpty()) {
@@ -393,14 +405,16 @@ public:
       // rate
       p.setFont(eco::mono(15, QFont::Bold)); p.setPen(eco::cyan());
       p.drawText(QRectF(xRate - 200, cy - 14, 200, 18), Qt::AlignRight | Qt::AlignVCenter,
-                 std::isfinite(b.rate) ? QString::number(b.rate, 'f', 2) + "%" : QString("—"));
+                 std::isfinite(b.rate) ? differs(b, "Policy rate") + QString::number(b.rate, 'f', 2) + "%" : QString("—"));
+      if (const QString t = macro::checkTip(b.currency, "Policy rate"); !t.isEmpty()) m_infos.append({QRectF(xRate - 100, cy - 18, 100, 36), t});
       p.setFont(eco::mono(9)); p.setPen(C("#4b4633"));
       p.drawText(QRectF(xRate - 200, cy + 3, 200, 12), Qt::AlignRight | Qt::AlignVCenter, rateSub(b));
       // next meeting
       const MeetingDate nm = b.nextMeeting();
       p.setFont(eco::mono(14)); p.setPen(C("#c9c5b5"));
       p.drawText(QRectF(xMeet, cy - 15, 200, 18), Qt::AlignLeft | Qt::AlignVCenter,
-                 nm.decision.isValid() ? shortDate(nm.first) + (nm.verified ? "" : "*") : QString("—"));
+                 nm.decision.isValid() ? differs(b, "Meeting") + shortDate(nm.decision) + (nm.verified ? "" : "*") : QString("—"));
+      if (differs(b, "Meeting").size()) m_infos.append({QRectF(xMeet, cy - 15, 110, 18), macro::checkTip(b.currency, "Meeting")});
       if (nm.decision.isValid()) {
         const int d = b.daysToNext();
         const QString t = d <= 0 ? QCoreApplication::translate("economy", "today") : QCoreApplication::translate("economy", "in %1d").arg(d);
@@ -420,7 +434,7 @@ public:
         continue;
       }
       p.setFont(eco::mono(14, QFont::Bold)); p.setPen(b.impliedBp >= 0 ? eco::cyan() : eco::red());
-      p.drawText(QRectF(xImpl - 120, cy - 14, 120, 18), Qt::AlignRight | Qt::AlignVCenter, eco::signedBp(b.impliedBp));
+      p.drawText(QRectF(xImpl - 120, cy - 14, 120, 18), Qt::AlignRight | Qt::AlignVCenter, differs(b, "Odds") + eco::signedBp(b.impliedBp));
       const double wk = b.impliedBp - b.impliedBpWeekAgo;
       p.setFont(eco::mono(9)); p.setPen(!std::isfinite(wk) ? C("#4b4633") : wk >= 0 ? C("#3fc7b4") : eco::red());
       p.drawText(QRectF(xImpl - 120, cy + 3, 120, 12), Qt::AlignRight | Qt::AlignVCenter,
@@ -441,7 +455,7 @@ public:
       else if (bias == "DOVISH") eco::pill(p, br, bt, C("#2a0d0b"), C("#e0786f"), false, 3);
       else eco::pill(p, br, bt, C("#171712"), C("#9e9f9e"), false, 3);
       m_infos.append({QRectF(xImpl - 100, r.top(), 100, r.height()), b.pricingSource +
-                      (b.pricingNote.isEmpty() ? QString() : ". " + b.pricingNote)});
+                      (b.pricingNote.isEmpty() ? QString() : ". " + b.pricingNote) + checkedOdds(b)});
     }
   }
 
@@ -692,7 +706,7 @@ public:
           QPen kp(C("#e0a050"), 1); kp.setDashPattern({2, 3}); p.setPen(kp);
           p.drawLine(QPointF(xx, pl.top()), QPointF(xx, pl.bottom()));
           p.setFont(eco::mono(8, QFont::Bold)); p.setPen(C("#e0a050"));
-          p.drawText(QRectF(xx - 20, pl.top() - 12, 40, 10), Qt::AlignCenter, bb.code);
+          p.drawText(QRectF(xx - 20, pl.top() - 12, 40, 10), Qt::AlignCenter, bb.shownCode());
         }
     }
     // x ticks (days)
@@ -960,6 +974,8 @@ RatesPage::RatesPage(QWidget* parent) : QWidget(parent) {
   m_scroll->setWidget(m_body);
   auto& cb = CentralBanks::instance();
   connect(&cb, &CentralBanks::updated, this, [this] { m_body->setMinimumHeight(m_body->contentHeight()); m_body->update(); });
+  macro::KeyFigures::instance().start();
+  connect(&macro::KeyFigures::instance(), &macro::KeyFigures::changed, this, [this] { m_body->update(); });
   connect(&eco::Blink::instance(), &eco::Blink::tick, this, [this] { m_body->update(QRect(0, 0, 30, 40)); });
   m_body->setMinimumHeight(m_body->contentHeight());
 }

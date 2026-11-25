@@ -9,6 +9,7 @@
 #include <QSet>
 #include <QTimer>
 #include <cmath>
+#include <functional>
 
 // The 8 central banks of the FX majors: policy rate, meeting calendar, market-implied odds, implied path,
 // committees and votes. Used by Economy › Rates, Global › Overview (Central Banks panel), Market › Fundamental
@@ -28,8 +29,14 @@
 // 30-day fed funds futures (Yahoo ZQ…​.CBT); ECB — CME 3-month €STR futures (Yahoo ESR…​.CME, thin); BoC — Montréal
 // Exchange 3-month CORRA futures (CRA, settlement prices); BoE — Bank of England instantaneous OIS (SONIA) forward
 // curve; BoJ — JPX/OSE 3-month TONA futures settlement prices; SNB — Eurex 3-month SARON futures settlement prices;
-// RBA / RBNZ — FinancialJuice's "<bank> Interest Rate Probabilities" picture read by OCR, kept only if it validates.
+// RBA / RBNZ — FinancialJuice's "<bank> Interest Rate Probabilities" picture read by OCR, kept only if it validates
+// (RateTables.h); past 36 market hours, the next meeting alone from investingLive's weekly article or (RBA, a source off
+// by default) Trading Economics.
 // When a bank has no valid feed, priced == false and pricingNote says why. Polymarket is probed only.
+//
+// FinancialJuice's pictures of the six other banks are read too: they say how a move that one 3-month contract prices
+// for two meetings is shared between them, and stand beside the computed odds (otherOdds).
+namespace wire { struct Item; }
 namespace macro {
 
 // Outcome probabilities (0–1) relative to the current rate. Invalid (NaN) when the bank is not priced.
@@ -42,8 +49,8 @@ struct Odds {
 };
 
 struct MeetingDate {
-  QDate decision;        // announcement day (the day charts and chips use)
-  QDate first;           // first day of a two-day meeting (the day tables show), = decision for one-day meetings
+  QDate decision;        // announcement day, the one every page shows
+  QDate first;           // first day of a two-day meeting, = decision for one-day meetings
   bool verified = true;  // false: entered by hand from a secondary source (site refuses programs)
 };
 
@@ -73,6 +80,7 @@ struct Decision {
 struct Bank {
   QString id;            // FED ECB BOE BOJ SNB RBA RBNZ BOC
   QString code;          // Fed ECB BoE BoJ SNB RBA RBNZ BoC
+  QString shownCode() const;   // the same in the interface language ("BCE")
   QString name;          // "Federal Reserve"
   QString iso2, currency;
   QString committee;     // "FOMC"
@@ -91,14 +99,15 @@ struct Bank {
 
   QList<MeetingDate> meetings;   // known schedule, ascending
   MeetingDate nextMeeting() const;
-  int daysToNext() const;        // days to the first day of the next meeting, 0 while it is under way; -1 if unknown
+  int daysToNext() const;        // days to the decision of the next meeting; -1 if unknown
   QList<MeetingDate> upcoming(int n = 10) const;
 
   bool priced = false;
   QString pricingSource; // "computed by Deepwater from CME 30-day fed funds futures (ZQ, via Yahoo)"
   QString pricingSourceEn;   // the same in English (Facts)
   QString pricingNote;   // why there are no odds, or caveats (thin market)
-  QDateTime pricedAt;
+  QDateTime pricedAt;    // when the odds were computed (published pictures and articles: when they came out)
+  QDate pricedDay;       // the market day they come from, for sources that publish once a day (BoE, BoJ, SNB); else invalid
   double overnight = NAN;   // EFFR / €STR / CORRA / SONIA / TONA / SARON used as today's level
   QList<PathPoint> path;    // next meetings that the futures cover (≤ 10)
   double impliedBp = NAN;   // next meeting
@@ -113,6 +122,17 @@ struct Bank {
   QString bias(int* pct = nullptr) const;   // "HAWKISH" (P(hike) ≥ 10%), "DOVISH" (P(cut) ≥ 10%), else "NEUTRAL"
 };
 
+// What another source prices for the next meeting, beside the odds shown.
+struct OtherOdds {
+  QString source;          // "FinancialJuice", "investingLive", "Trading Economics"
+  double bp = NAN;         // expected change at the next meeting
+  QDateTime at;            // when it was published or read (UTC)
+  QDate meeting;           // its meeting date, when it gives one
+  bool fresh = false;      // published less than 36 market hours ago
+  bool used = false;       // the odds shown already lean on it (they come from it, or its split of a shared contract)
+  double level = NAN;      // the rate it prices after the meeting (%), when it gives one
+};
+
 class CentralBanks : public QObject {
   Q_OBJECT
 public:
@@ -125,6 +145,11 @@ public:
   void refreshOdds(int maxAgeSec);
   const QList<Bank>& banks() const { return m_banks; }
   const Bank* bank(const QString& key) const;   // id, code, currency or iso2 (case-insensitive)
+  QList<OtherOdds> otherOdds(const QString& id) const;
+  // The newest table read from the bank's FinancialJuice picture (UTC); invalid when there is none.
+  QDateTime pictureAt(const QString& id) const;
+  // Seconds between two moments without Saturdays and Sundays (UTC): nothing is priced then.
+  static qint64 marketSeconds(QDateTime a, const QDateTime& b);
 
   // Polymarket (reference's second odds source): reachability only.
   bool polymarketReachable() const { return m_polyOk; }
@@ -147,6 +172,12 @@ private:
   void loadSnbPricing();         // Eurex 3M SARON futures
   void loadFjPricing();          // RBA / RBNZ: FinancialJuice pictures, OCR
   void applyFjTable(const QString& bankId);
+  void nextPicture();            // the six other banks' pictures, one every four minutes
+  void readPictures(const QString& bankId, const QList<wire::Item>& newestFirst);
+  void readPicture(const QString& bankId, const QString& item, const QString& url, const QDateTime& published, bool again, std::function<void()> next);
+  void loadWeeklyArticle(const QString& url, const QDateTime& published);
+  void loadTradingEconomics();
+  void readCalendarDecisions();   // decisions of the RBA, RBNZ, BoJ and SNB from the release calendar, until the BIS has them
   void loadDecisions();
   void probePolymarket();
   void derive(Bank& b);           // decisions from the rate history where no statement is parsed
@@ -161,8 +192,18 @@ private:
   bool m_polyOk = false;
   QString m_polyStatus;
   bool m_emitQueued = false;
-  QSet<QString> m_fjSeen;        // FinancialJuice item ids already read
+  struct PictureTry { int tries = 0; qint64 last = 0; bool busy = false, done = false; };
+  QHash<QString, PictureTry> m_pictures;   // FinancialJuice item id → its reading
+  QHash<QString, int> m_weeklyTried;       // weekly article → readings tried
+  bool m_fjWatching = false;
+  QStringList m_pictureQueue;              // banks whose picture is to be read, one at a time
+  QTimer m_pictureTimer;
+  QHash<QString, QDateTime> m_split;       // bank id → the picture its shared contracts are split with
+  qint64 m_teAsked = 0;                    // Trading Economics: last reading asked (ms)
+  QDate m_teRefused;                       // the day it refused
   QVector<QPair<QDate, double>> m_sonia;   // BoE: SONIA fixings (IADB IUDSOIA, last 30 days), ascending
+  bool m_calendarWatched = false;
+  int m_snbWaits = 0;            // SNB pricing: 5 s waits for the policy rate and SARON so far
   int m_boeWaits = 0;            // BoE pricing: 5 s waits for Bank Rate and SONIA so far
   bool m_boeNoSonia = false;     // BoE pricing ran without SONIA: run it again when SONIA arrives
   int m_fedWaits = 0;            // Fed pricing: 4 s waits for the EFFR so far
@@ -171,7 +212,10 @@ private:
 // Solver used for the odds (exposed for tests). Each contract is the average overnight rate over [start, end).
 struct RateContract { QDate start, end; double avg = NAN; };
 // Returns the expected overnight rate after each meeting (effective dates, ascending); NaN where no contract covers it.
-QVector<double> solveMeetingRates(double current, const QVector<QDate>& effective, const QVector<RateContract>& contracts);
+// `hint`: another table's expected move at each meeting (percent): a contract that prices several meetings at once is
+// shared between them as the table shares them, what is left over equally. Without it: equally.
+QVector<double> solveMeetingRates(double current, const QVector<QDate>& effective, const QVector<RateContract>& contracts,
+                                  const QVector<double>& hint = {});
 // Outcome odds after each meeting from the expected path (25 bp steps, independent meetings).
 QVector<Odds> oddsFromPath(double current, const QVector<double>& rates);
 // A decision's English text (as Facts stores it, "Held Bank Rate at 3.75% (vote 6–3)") in the interface language;

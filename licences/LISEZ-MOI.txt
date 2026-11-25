@@ -1,0 +1,10 @@
+Licences de Deepwater Mark 4
+
+Deepwater            AGPL-3.0            Deepwater-AGPL-3.0.txt   code source : https://github.com/jeffepstein53/DeepwaterMark4
+Qt 6.12              GPL-3.0             Qt.txt, GPL-3.0.txt
+PineTS               AGPL-3.0            PineTS-LICENSE.txt
+QuickJS-ng           MIT                 QuickJS-ng-LICENSE.txt
+miniz                MIT                 miniz-LICENSE.txt
+SDK LZMA             domaine public      https://www.7-zip.org/sdk.html
+Indicateurs          MIT                 Indicateurs-NOTICE.md (Quant Terminal)
+Polices              OFL 1.1             Polices.txt

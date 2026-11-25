@@ -89,10 +89,11 @@ Retail::Retail() {
   const QByteArray fx = qgetenv("DW_MYFXBOOK_FIXTURE");
   if (!fx.isEmpty() && settings::isTestProfile()) { loadFixture(QString::fromUtf8(fx)); return; }
   loadRecordings();   // on a worker thread; changed() when they are in
-  m_state = settings::value(kSession).toString().isEmpty() ? State::NotConnected : State::Connected;
+  settings::secretValue(kEmail);   // encrypts what an older version wrote in clear
+  m_state = settings::secretValue(kSession).isEmpty() ? State::NotConnected : State::Connected;
 }
 
-QString Retail::email() const { return settings::value(kEmail).toString(); }
+QString Retail::email() const { return settings::secretValue(kEmail); }
 
 QDateTime Retail::lastRequest() const {
   const QVariant v = settings::value(kLast);
@@ -130,7 +131,7 @@ void Retail::setActive(QObject* owner, bool active) {
 void Retail::login(const QString& email, const QString& password) {
   if (m_fixture) { setState(State::Connected); return; }
   if (email.trimmed().isEmpty() || password.isEmpty()) { setState(State::Error, QCoreApplication::translate("positioning", "Enter your Myfxbook email and password.")); return; }
-  settings::setValue(kEmail, email.trimmed());
+  settings::setSecretValue(kEmail, email.trimmed());
   setState(State::LoggingIn);
   // Myfxbook's API takes the credentials as GET parameters (HTTPS). Never cached, never logged.
   const QByteArray q = "email=" + QUrl::toPercentEncoding(email.trimmed()) + "&password=" + QUrl::toPercentEncoding(password);
@@ -147,7 +148,10 @@ void Retail::login(const QString& email, const QString& password) {
     }
     const QString session = o.value("session").toString();
     if (session.isEmpty()) { setState(State::Error, QCoreApplication::translate("positioning", "Myfxbook returned no session.")); return; }
-    settings::setValue(kSession, session);
+    if (!settings::setSecretValue(kSession, session)) {
+      setState(State::Error, QCoreApplication::translate("positioning", "Windows could not encrypt the Myfxbook session: it is not kept."));
+      return;
+    }
     setState(State::Connected);
     refresh();
   });
@@ -155,7 +159,7 @@ void Retail::login(const QString& email, const QString& password) {
 
 void Retail::logout() {
   if (m_fixture) { setState(State::NotConnected); return; }
-  const QString session = settings::value(kSession).toString();
+  const QString session = settings::secretValue(kSession);
   settings::remove(kSession);
   setState(State::NotConnected);
   if (session.isEmpty()) return;
@@ -172,7 +176,7 @@ void Retail::refresh() {
 }
 
 void Retail::request() {
-  const QString session = settings::value(kSession).toString();
+  const QString session = settings::secretValue(kSession);
   if (session.isEmpty()) { setState(State::NotConnected); return; }
   m_busy = true;
   settings::setValue(kLast, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));

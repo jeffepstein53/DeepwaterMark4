@@ -1,4 +1,5 @@
 #include "core/Settings.h"
+#include "core/Secret.h"
 #include <QSettings>
 #include <QDir>
 #include <QDebug>
@@ -43,6 +44,19 @@ void remove(const QString& key) {
   const QString k = nk(key);
   if (auto* p = profile()) { p->remove(k); p->setValue("__removed/" + k, true); return; }
   native().remove(k);
+}
+QString secretValue(const QString& key) {
+  const QString stored = value(key).toString();
+  if (stored.isEmpty()) return {};
+  const QString plain = secret::open(stored);
+  if (!secret::isSealed(stored)) setSecretValue(key, plain);   // written in clear before this version
+  return plain;
+}
+bool setSecretValue(const QString& key, const QString& v) {
+  const QString s = secret::seal(v);
+  if (s.isEmpty() && !v.isEmpty()) return false;
+  setValue(key, s);
+  return true;
 }
 bool contains(const QString& key) { return value(key).isValid(); }
 void dropRetired() {

@@ -1,0 +1,11 @@
+Qt 6.12.0 (Core, Gui, Widgets, Network, Svg, Concurrent, Xml, Sql, OpenGL, WebSockets, HttpServer, Pdf, PrintSupport, WebView)
+Copyright (C) The Qt Company Ltd. and other contributors. https://www.qt.io
+
+Deepwater est distribué sous AGPL-3.0 et utilise Qt sous GPL-3.0 (texte : GPL-3.0.txt, article 13). Les bibliothèques Qt
+sont des fichiers .dll séparés, non modifiés. Leur code source : https://download.qt.io/official_releases/qt/6.12/6.12.0/
+Qt Pdf contient PDFium (BSD-3-Clause / Apache-2.0, Copyright The PDFium Authors). La liste complète des composants et de
+leurs licences est publiée par Qt : https://doc.qt.io/qt-6/licenses-used-in-qt.html
+
+Deepwater is distributed under AGPL-3.0 and uses Qt under GPL-3.0 (text: GPL-3.0.txt, section 13). The Qt libraries are
+separate, unmodified .dll files; their source code is at the address above. Qt Pdf contains PDFium (BSD-3-Clause /
+Apache-2.0). The full list of Qt's third-party components and licences is at the address above.

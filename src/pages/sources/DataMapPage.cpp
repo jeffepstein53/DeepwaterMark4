@@ -21,6 +21,11 @@
 #include "ui/Kit.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
+#include <QFutureWatcher>
+#include <QImage>
+#include <QtConcurrent>
+#include <QPixmap>
+#include <QtMath>
 #include <QCoreApplication>
 #include <QFile>
 #include <QHBoxLayout>
@@ -211,7 +216,8 @@ protected:
     QStringList tabOrder; for (const auto& t : m_tabs) tabOrder << t.id;
     // left column: registry + local inputs, grouped by the tab they feed most (ties: navigation order)
     QHash<QString, int> byNode;
-    for (const auto& s : sources::all()) {
+    for (const auto& declared : sources::all()) {
+      const sources::Source s = sources::shown(declared);
       if (s.access == sources::Access::Forbidden) continue;
       const QString node = nodeOf(s.id);
       if (byNode.contains(node)) {   // another feed of the same institution: union of its pages
@@ -224,8 +230,10 @@ protected:
       m_src << Src{node, s.publisher, s.publisher, s.data, s.terms, s.access, s.pages, {}, false, {}, {s.id}};
     }
     // the node keeps the institution's main declaration (the data feed) for its texts
-    for (auto& x : m_src) if (const auto* main = sources::byId(x.id)) { x.publisher = main->publisher; x.name = main->publisher;
-                                                                      x.data = main->data; x.terms = main->terms; x.access = main->access; }
+    for (auto& x : m_src) if (const auto* found = sources::byId(x.id)) {
+      const sources::Source m = sources::shown(*found);
+      x.publisher = m.publisher; x.name = m.publisher; x.data = m.data; x.terms = m.terms; x.access = m.access;
+    }
     for (const auto& l : locals())
       m_src << Src{l.id, QCoreApplication::translate("sources", l.name), QCoreApplication::translate("sources", l.name), QCoreApplication::translate("sources", l.data), QString(), sources::Access::Bundled, l.pages, {}, true, {}, {}};
     for (auto& s : m_src) {
@@ -286,6 +294,11 @@ protected:
       y += kGap;
     }
     m_laidW = W;
+    dropLayers();
+    m_linkL = W; m_linkR = 0;
+    for (const auto& s : std::as_const(m_src)) m_linkL = std::min(m_linkL, s.r.right());
+    for (const auto& s : std::as_const(m_subs)) m_linkR = std::max(m_linkR, s.r.left());
+    m_linkR += 1;
   }
 
   // a node of several feeds: failing if one fails, active if one answers, disabled when all are off
@@ -336,6 +349,67 @@ protected:
     return m_hover == s.id || m_hover == page || m_hover == page.section('/', 0, 0);
   }
 
+  void drawLink(QPainter& p, const Src& s, const Sub& sub, int alpha, qreal w) const {
+    const QPointF a(s.r.right(), s.r.center().y()), b(sub.r.left(), sub.r.center().y());
+    const qreal dx = (b.x() - a.x()) * 0.5;
+    QPainterPath path(a);
+    path.cubicTo(a + QPointF(dx, 0), b - QPointF(dx, 0), b);
+    QColor col = tabColour(sub.tab);
+    col.setAlpha(alpha);
+    p.setPen(QPen(col, w, s.local ? Qt::DashLine : Qt::SolidLine));
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(path);
+  }
+  // Every link at one strength, drawn once: hundreds of translucent curves are too slow to draw again at each repaint
+  // (a source's answer, the mouse over another box).
+  // Off the window's thread: some 300 ms of drawing.
+  const QPixmap& linkLayer(bool dim) {
+    const int which = dim ? 1 : 0;
+    QPixmap& px = m_layer[which];
+    if (!px.isNull() || m_drawing[which]) return px;
+    m_drawing[which] = true;
+    struct Link { QPointF a, b; QColor col; bool dash; };
+    QVector<Link> links;
+    const qreal x0 = int(m_linkL);
+    for (const auto& s : std::as_const(m_src))
+      for (const auto& page : s.pages)
+        if (const int k = m_subIndex.value(page, -1); k >= 0) {
+          QColor col = tabColour(m_subs[k].tab);
+          col.setAlpha(dim ? 14 : 70);
+          links << Link{QPointF(s.r.right() - x0, s.r.center().y()), QPointF(m_subs[k].r.left() - x0, m_subs[k].r.center().y()), col, s.local};
+        }
+    const qreal r = devicePixelRatioF();
+    const QSize size(qCeil(std::max<qreal>(1, m_linkR - x0) * r), qCeil(height() * r));
+    const QColor bg = theme::pal().bg;
+    const int gen = m_layerGen;
+    auto* w = new QFutureWatcher<QImage>(this);
+    connect(w, &QFutureWatcher<QImage>::finished, this, [this, w, which, gen] {
+      w->deleteLater();
+      if (gen != m_layerGen) return;
+      m_drawing[which] = false;
+      m_layer[which] = QPixmap::fromImage(w->result());
+      update();
+    });
+    w->setFuture(QtConcurrent::run([links, size, r, bg] {
+      QImage img(size, QImage::Format_RGB32);
+      img.setDevicePixelRatio(r);
+      img.fill(bg);
+      QPainter p(&img); p.setRenderHint(QPainter::Antialiasing);
+      for (const Link& l : links) {
+        const qreal dx = (l.b.x() - l.a.x()) * 0.5;
+        QPainterPath path(l.a);
+        path.cubicTo(l.a + QPointF(dx, 0), l.b - QPointF(dx, 0), l.b);
+        p.setPen(QPen(l.col, 1.1, l.dash ? Qt::DashLine : Qt::SolidLine));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(path);
+      }
+      p.end();
+      return img;
+    }));
+    return px;
+  }
+  void dropLayers() { ++m_layerGen; for (int i : {0, 1}) { m_layer[i] = QPixmap(); m_drawing[i] = false; } }
+
   void paintEvent(QPaintEvent*) override {
     if (m_laidW != width()) layout();
     QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
@@ -344,23 +418,12 @@ protected:
     const bool focus = !m_hover.isEmpty() || !m_query.isEmpty();
 
     // links first (under the boxes)
-    for (const auto& s : m_src) {
-      for (const auto& page : s.pages) {
-        const int k = m_subIndex.value(page, -1);
-        if (k < 0) continue;
-        const auto& sub = m_subs[k];
-        const QPointF a(s.r.right(), s.r.center().y()), b(sub.r.left(), sub.r.center().y());
-        const qreal dx = (b.x() - a.x()) * 0.5;
-        QPainterPath path(a);
-        path.cubicTo(a + QPointF(dx, 0), b - QPointF(dx, 0), b);
-        QColor col = tabColour(sub.tab);
-        const bool on = litLink(s, page);
-        col.setAlpha(focus ? (on ? 220 : 14) : 70);
-        p.setPen(QPen(col, focus && on ? 1.8 : 1.1, s.local ? Qt::DashLine : Qt::SolidLine));
-        p.setBrush(Qt::NoBrush);
-        p.drawPath(path);
-      }
-    }
+    if (m_layerBg != c.bg.rgb() || (!m_layer[0].isNull() && !qFuzzyCompare(m_layer[0].devicePixelRatio(), devicePixelRatioF()))) { dropLayers(); m_layerBg = c.bg.rgb(); }
+    if (const QPixmap& px = linkLayer(focus); !px.isNull()) p.drawPixmap(QPointF(int(m_linkL), 0), px);
+    if (focus)
+      for (const auto& s : m_src)
+        for (const auto& page : s.pages)
+          if (const int k = m_subIndex.value(page, -1); k >= 0 && litLink(s, page)) drawLink(p, s, m_subs[k], 220, 1.8);
 
     // left: group headers and sources
     QString g;
@@ -480,7 +543,7 @@ protected:
                if (s.feeds.size() < 2) return QString();
                QStringList l;
                for (const auto& f : s.feeds) if (const auto* src = sources::byId(f))
-                 l << "· " + (src->data.left(90) + (src->data.size() > 90 ? "…" : "")).toHtmlEscaped() + " — " + statusText(statusOf(f)).toHtmlEscaped();
+                 l << "· " + [&] { const QString d = sources::shown(*src).data; return d.left(90) + (d.size() > 90 ? "…" : ""); }().toHtmlEscaped() + " — " + statusText(statusOf(f)).toHtmlEscaped();
                return QCoreApplication::translate("sources", "Feeds:").toHtmlEscaped() + "<br>" + l.join("<br>") + "<br>";
              }() +
              (s.terms.isEmpty() ? QString() : QCoreApplication::translate("sources", "Terms: %1").arg(s.terms).toHtmlEscaped() + "<br>") +
@@ -505,6 +568,11 @@ private:
   QSet<QString> m_matchIds, m_matchPages;   // sources matching m_query and the pages they feed (setQuery)
   QVector<int> m_shownStatus;   // node statuses when the canvas was last told to repaint
   qreal m_leftX = 0, m_rightX = 0, m_laidW = -1;
+  QPixmap m_layer[2];           // every link: at rest, and dimmed behind the lit ones
+  QRgb m_layerBg = 0;
+  bool m_drawing[2] = {false, false};
+  int m_layerGen = 0;
+  qreal m_linkL = 0, m_linkR = 0;
   QPointF m_press;
   int m_height = 600;
 };

@@ -16,6 +16,9 @@
 #include "app/Zoom.h"
 #include "app/Updater.h"
 #include "app/Background.h"
+#include "app/Watchdog.h"
+#include "app/Alerts.h"
+#include "app/Backup.h"
 #include "app/SingleInstance.h"
 #include "core/Paths.h"
 #include "core/Settings.h"
@@ -123,7 +126,7 @@ int main(int argc, char** argv) {
   // updates (app/Updater): the launch check and the release WebSocket; not during the audits, which measure pages
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) app::Updater::instance().start();
   // data kept warm while no page shows it (app/Background, Options > Data): after the first page and the launch's requests
-  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) QTimer::singleShot(20000, &app, [] { app::Background::instance().start(); });
+  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) QTimer::singleShot(20000, &app, [] { app::Background::instance().start(); app::Alerts::instance().start(); app::Watchdog::instance().start(); app::Backup::instance().start(); });
 #ifndef Q_OS_IOS
   // Claude (Options > Claude): served while the app runs, when switched on
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) {

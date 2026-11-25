@@ -448,6 +448,58 @@
         <source>Working…</source>
         <translation>En cours…</translation>
     </message>
+    <message>
+        <source>ALERTS</source>
+        <translation>ALERTES</translation>
+    </message>
+    <message>
+        <source>BACKUP</source>
+        <translation>SAUVEGARDE</translation>
+    </message>
+    <message>
+        <source>A Windows notification when a figure is published or when something is wrong with the data. Never on prices.</source>
+        <translation>Une notification Windows quand un chiffre est publié ou quand un problème touche les données. Jamais sur les prix.</translation>
+    </message>
+    <message>
+        <source>Results of high-impact releases</source>
+        <translation>Résultats des annonces à fort impact</translation>
+    </message>
+    <message>
+        <source>Problems found by the data check</source>
+        <translation>Problèmes trouvés par le contrôle des données</translation>
+    </message>
+    <message>
+        <source>Sound</source>
+        <translation>Son</translation>
+    </message>
+    <message>
+        <source>TRY ONE</source>
+        <translation>ESSAYER</translation>
+    </message>
+    <message>
+        <source>COPY NOW</source>
+        <translation>COPIER MAINTENANT</translation>
+    </message>
+    <message>
+        <source>OPEN THE FOLDER</source>
+        <translation>OUVRIR LE DOSSIER</translation>
+    </message>
+    <message>
+        <source>Copying…</source>
+        <translation>Copie en cours…</translation>
+    </message>
+    <message>
+        <source>Settings, journal and records, copied once a day on this computer; the last 14 days are kept.</source>
+        <translation>Réglages, journal et relevés, copiés une fois par jour sur cet ordinateur ; les 14 derniers jours sont gardés.</translation>
+    </message>
+    <message>
+        <source>Last copy: %1.</source>
+        <translation>Dernière copie : %1.</translation>
+    </message>
+    <message>
+        <source>No copy yet.</source>
+        <translation>Pas encore de copie.</translation>
+    </message>
 </context>
 <context>
     <name>theme</name>
@@ -697,6 +749,14 @@
         <source>Version %1 is available.</source>
         <translation>La version %1 est disponible.</translation>
     </message>
+    <message>
+        <source>GitHub gives no fingerprint for this file: it is not installed.</source>
+        <translation>GitHub ne donne pas d&apos;empreinte pour ce fichier : il n&apos;est pas installé.</translation>
+    </message>
+    <message>
+        <source>The downloaded file is not the one GitHub describes (its fingerprint differs): it has been deleted.</source>
+        <translation>Le fichier téléchargé n&apos;est pas celui que décrit GitHub (son empreinte diffère) : il a été supprimé.</translation>
+    </message>
 </context>
 <context>
     <name>ai</name>
@@ -726,6 +786,60 @@
     <message>
         <source>Deepwater is already open on this computer. Look for its window in the taskbar.</source>
         <translation>Deepwater est déjà ouvert sur cet ordinateur. Cherchez sa fenêtre dans la barre des tâches.</translation>
+    </message>
+</context>
+<context>
+    <name>alerts</name>
+    <message>
+        <source>Forecast %1</source>
+        <translation>Attendu %1</translation>
+    </message>
+    <message>
+        <source>previous %1</source>
+        <translation>précédent %1</translation>
+    </message>
+    <message>
+        <source>%1 figures published</source>
+        <translation>%1 chiffres publiés</translation>
+    </message>
+    <message>
+        <source>Data check: %1 points to see</source>
+        <translation>Contrôle des données : %1 points à voir</translation>
+    </message>
+    <message>
+        <source>Deepwater&apos;s notifications work</source>
+        <translation>Les notifications de Deepwater fonctionnent</translation>
+    </message>
+    <message>
+        <source>This is how a figure is announced when it is published.</source>
+        <translation>Voici comment un chiffre est annoncé quand il est publié.</translation>
+    </message>
+</context>
+<context>
+    <name>backup</name>
+    <message>
+        <source>The folder %1 cannot be written.</source>
+        <translation>Impossible d&apos;écrire dans le dossier %1.</translation>
+    </message>
+    <message>
+        <source>The settings could not be copied.</source>
+        <translation>Les réglages n&apos;ont pas pu être copiés.</translation>
+    </message>
+    <message>
+        <source>%1 could not be copied.</source>
+        <translation>%1 n&apos;a pas pu être copié.</translation>
+    </message>
+    <message>
+        <source>Deepwater&apos;s settings and records on %1: %2 files, %3 KB.</source>
+        <translation>Réglages et relevés de Deepwater au %1 : %2 fichiers, %3 Ko.</translation>
+    </message>
+    <message>
+        <source>To put them back: 1. quit Deepwater; 2. double-click reglages.reg (the settings); 3. copy what is in the folder donnees into %1.</source>
+        <translation>Pour les remettre : 1. quitter Deepwater ; 2. double-cliquer sur reglages.reg (les réglages) ; 3. copier le contenu du dossier donnees dans %1.</translation>
+    </message>
+    <message>
+        <source>The Myfxbook session is encrypted for this Windows account: elsewhere, sign in again.</source>
+        <translation>La session Myfxbook est chiffrée pour ce compte Windows : ailleurs, il faudra se reconnecter.</translation>
     </message>
 </context>
 </TS>

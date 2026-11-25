@@ -8,12 +8,14 @@
 // switch on a first line and everything else under it at full width; key and login fields stack. A short window
 // (< 420 px) keeps the desktop cards but scrolls the header with the list too.
 #include "app/Pages.h"
+#include "pages/sources/CheckPanel.h"
 #include "net/Sources.h"
 #include "core/Settings.h"
 #include "positioning/Retail.h"
 #include "ui/Kit.h"
 #include "ui/Theme.h"
 #include "ui/Touch.h"
+#include <QElapsedTimer>
 #include <QCoreApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -157,30 +159,73 @@ private:
   bool m_on = true;
 };
 
+// ---------------------------------------------------------------------------------------------- one text of a card
+// Painted: a QLabel with its style sheet costs some thirty times more to create, and a card has six of them.
+class Text : public QWidget {
+public:
+  Text(const QString& t, const QFont& f, const QColor& c, QWidget* p, bool wrap = false) : QWidget(p), m_text(t), m_font(f), m_color(c), m_wrap(wrap) {
+    QSizePolicy sp(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    sp.setHeightForWidth(wrap);
+    setSizePolicy(sp);
+  }
+  QString text() const { return m_text; }
+  void setText(const QString& t) { if (t != m_text) { m_text = t; changed(); } }
+  void setColor(const QColor& c) { if (c != m_color) { m_color = c; update(); } }
+  void setAlignment(Qt::Alignment a) { m_align = a; update(); }
+  void setWordWrap(bool on) {
+    if (on == m_wrap) return;
+    m_wrap = on;
+    QSizePolicy sp = sizePolicy(); sp.setHeightForWidth(on); setSizePolicy(sp);
+    changed();
+  }
+  bool hasHeightForWidth() const override { return m_wrap; }
+  int heightForWidth(int w) const override {
+    if (w != m_w) { m_w = w; m_h = w <= 0 ? 0 : QFontMetrics(m_font).boundingRect(QRect(0, 0, w, 100000), int(m_align) | Qt::TextWordWrap, m_text).height(); }
+    return m_h;
+  }
+  QSize sizeHint() const override {
+    const int w = QFontMetrics(m_font).horizontalAdvance(m_text) + 1;
+    return m_wrap ? QSize(std::min(w, 320), heightForWidth(std::max(width(), 320))) : QSize(w, QFontMetrics(m_font).height());
+  }
+  QSize minimumSizeHint() const override { return m_wrap ? QSize(40, QFontMetrics(m_font).height()) : sizeHint(); }
+protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter p(this);
+    p.setFont(m_font); p.setPen(m_color);
+    p.drawText(rect(), int(m_align) | (m_wrap ? int(Qt::TextWordWrap) : 0), m_text);
+  }
+private:
+  void changed() { m_w = -1; updateGeometry(); update(); }
+  QString m_text; QFont m_font; QColor m_color; bool m_wrap;
+  Qt::Alignment m_align = Qt::AlignLeft | Qt::AlignVCenter;
+  mutable int m_w = -1, m_h = 0;
+};
+
 // ---------------------------------------------------------------------------------------------- one source row
-class Row : public QFrame {
+class Row : public QWidget {
 public:
   sources::Source src;
-  explicit Row(const sources::Source& s, QWidget* parent) : QFrame(parent), src(s) {
+  explicit Row(const sources::Source& s, QWidget* parent) : QWidget(parent), src(s) {
     const auto& c = theme::pal();
-    setObjectName("row");
     auto* g = m_grid = new QGridLayout(this);
     g->setContentsMargins(14, 10, 14, 10); g->setHorizontalSpacing(16); g->setVerticalSpacing(4);
     m_pill = new StatusPill(this);
     place(m_pill, 0, 0, 1, 1, Qt::AlignTop);
 
-    auto* name = m_name = ui::label(s.publisher, theme::condensed(16, QFont::Bold), c.text, this);
-    auto* meta = ui::label(s.id + "  ·  " + (s.hosts.isEmpty() ? QString("—") : s.hosts.join(", ")) + "  ·  " +
-                               QCoreApplication::translate("sources", "1 request / %1").arg(paceText(s.paceMs)),
-                           theme::mono(10), c.textMute, this);
+    auto* name = m_name = new Text(s.publisher, theme::condensed(16, QFont::Bold), c.text, this);
+    // selectable text: a label, coloured by its palette (a style sheet each costs most of the list's opening time)
+    auto* meta = new QLabel(s.id + "  ·  " + (s.hosts.isEmpty() ? QString("—") : s.hosts.join(", ")) + "  ·  " +
+                            QCoreApplication::translate("sources", "1 request / %1").arg(paceText(s.paceMs)), this);
+    meta->setFont(theme::mono(10));
+    QPalette mp = meta->palette(); mp.setColor(QPalette::WindowText, c.textMute); meta->setPalette(mp);
     meta->setTextInteractionFlags(Qt::TextSelectableByMouse);
     meta->setWordWrap(true);   // a source with many hosts (news-images) must not hold every card wider than the window
     auto* nameBox = new QVBoxLayout; nameBox->setSpacing(2);
     nameBox->addWidget(name); nameBox->addWidget(meta);
     place(nameBox, 0, 1, 1, 1);
 
-    auto* access = ui::label(accessText(s.access), theme::mono(10, QFont::Bold, 1.4),
-                             s.access == sources::Access::Keyless ? c.textDim : c.accentText, this);
+    auto* access = new Text(accessText(s.access), theme::mono(10, QFont::Bold, 1.4),
+                            s.access == sources::Access::Keyless ? c.textDim : c.accentText, this);
     access->setAlignment(Qt::AlignRight | Qt::AlignTop);
     place(access, 0, 2, 1, 1, Qt::AlignTop | Qt::AlignRight);
 
@@ -189,22 +234,18 @@ public:
     m_switch->toggled = [this](bool on) { sources::setDisabled(src.id, !on); };
     place(m_switch, 0, 3, 1, 1, Qt::AlignTop | Qt::AlignRight);
 
-    auto* data = ui::label(s.data, theme::sans(12), c.textDim, this);
-    data->setWordWrap(true);
+    auto* data = new Text(s.data, theme::sans(12), c.textDim, this, true);
     place(data, 1, 1, 1, 3);
     if (!s.pages.isEmpty()) {
-      auto* pages = ui::label(QCoreApplication::translate("sources", "Used by: %1").arg(pageNames(s.pages)),
-                              theme::sans(11), c.textMute, this);
-      pages->setWordWrap(true);
+      auto* pages = new Text(QCoreApplication::translate("sources", "Used by: %1").arg(pageNames(s.pages)),
+                             theme::sans(11), c.textMute, this, true);
       place(pages, 2, 1, 1, 3);
     }
     if (!s.terms.isEmpty()) {
-      auto* terms = ui::label(QCoreApplication::translate("sources", "Terms: %1").arg(s.terms), theme::sans(11), c.textMute, this);
-      terms->setWordWrap(true);
+      auto* terms = new Text(QCoreApplication::translate("sources", "Terms: %1").arg(s.terms), theme::sans(11), c.textMute, this, true);
       place(terms, 3, 1, 1, 3);
     }
-    m_health = ui::label(QString(), theme::mono(10), c.textDim, this);
-    m_health->setWordWrap(true);
+    m_health = new Text(QString(), theme::mono(10), c.textDim, this, true);
     place(m_health, 4, 1, 1, 3);
 
     if (!s.keyName.isEmpty()) addKeyField();   // keyed sources, and optional tokens (Hugging Face)
@@ -267,16 +308,17 @@ public:
       text += "\n" + QCoreApplication::translate("sources", "No key saved: the data it provides stays empty.");
     if (m_health->text() != text) m_health->setText(text);
     m_health->setToolTip(h.lastError.size() > 140 ? h.lastError : QString());
-    // a style sheet re-polishes the widget and its children: set only when the colours change
-    const QColor hc = st == sources::Status::Failing ? c.down : c.textDim;
-    const QString healthQss = QString("color:%1;background:transparent;").arg(hc.name());
-    if (healthQss != m_healthQss) { m_healthQss = healthQss; m_health->setStyleSheet(healthQss); }
-    const QString rowQss = QString("QFrame#row { background: %1; border: 1px solid %2; border-radius: 3px; }")
-                               .arg((st == sources::Status::Disabled ? c.bg : c.panel).name(), c.border.name());
-    if (rowQss != m_rowQss) { m_rowQss = rowQss; setStyleSheet(rowQss); }
+    m_health->setColor(st == sources::Status::Failing ? c.down : c.textDim);
+    if (const QColor bg = st == sources::Status::Disabled ? c.bg : c.panel; bg != m_bg) { m_bg = bg; update(); }
     if (m_retailState) updateAccount();
   }
 
+protected:
+  void paintEvent(QPaintEvent*) override {
+    QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(theme::pal().border, 1)); p.setBrush(m_bg);
+    p.drawRoundedRect(QRectF(rect()).adjusted(.5, .5, -.5, -.5), 3, 3);
+  }
 private:
   // where each cell sits on a desktop card (setPhone moves them)
   struct Cell { QWidget* w = nullptr; QLayout* l = nullptr; int r = 0, c = 0, rs = 1, cs = 1; Qt::Alignment a; };
@@ -387,14 +429,14 @@ private:
 
   StatusPill* m_pill = nullptr;
   Switch* m_switch = nullptr;
-  QLabel* m_health = nullptr;
-  QString m_healthQss, m_rowQss;   // the style sheets set last
+  Text* m_health = nullptr;
+  QColor m_bg;
   QLineEdit *m_email = nullptr, *m_password = nullptr;
   QPushButton *m_connect = nullptr, *m_logout = nullptr;
   QLabel* m_retailState = nullptr;
   QGridLayout* m_grid = nullptr;
   QList<Cell> m_cells;
-  QLabel* m_name = nullptr;
+  Text* m_name = nullptr;
   QBoxLayout *m_fieldBox = nullptr, *m_accountBox = nullptr;
   QHBoxLayout *m_fieldButtons = nullptr, *m_accountButtons = nullptr;
   bool m_phone = false;
@@ -499,12 +541,17 @@ public:
     scroll->setWidget(inner);
     v->addWidget(scroll, 1);
 
-    QList<sources::Source> all = sources::all();
-    std::sort(all.begin(), all.end(), [](const sources::Source& a, const sources::Source& b) {
+    for (const auto& s : sources::all()) m_all << sources::shown(s);
+    std::sort(m_all.begin(), m_all.end(), [](const sources::Source& a, const sources::Source& b) {
       return a.publisher.compare(b.publisher, Qt::CaseInsensitive) < 0;
     });
-    for (const auto& s : all) { auto* r = new Row(s, inner); m_rows << r; m_list->addWidget(r); }
+    m_checks = new CheckPanel(inner);
+    m_list->addWidget(m_checks);
     m_list->addStretch(1);
+    m_build.setInterval(0);
+    connect(&m_build, &QTimer::timeout, this, &SourcesPage::buildSome);
+    buildSome();
+    m_build.start();
 
     connect(m_filter, &ui::PillBar::changed, this, [this](int i) { m_grid->setCurrent(i); applyFilter(); });
     connect(m_search, &QLineEdit::textChanged, this, [this] { applyFilter(); });
@@ -521,12 +568,12 @@ public:
   }
 
 protected:
-  void showEvent(QShowEvent*) override { refreshAll(); m_tick.start(); }
+  void showEvent(QShowEvent*) override { refreshAll(); m_tick.start(); if (m_rows.size() < m_all.size()) m_build.start(); }
   void resizeEvent(QResizeEvent* e) override {
     QWidget::resizeEvent(e);
     setMode(ui::compact(width(), 920), ui::compact(width(), 920) || height() < 420);   // desktop from 902 px
   }
-  void hideEvent(QHideEvent*) override { m_tick.stop(); }
+  void hideEvent(QHideEvent*) override { m_tick.stop(); m_build.stop(); }
   void paintEvent(QPaintEvent*) override { QPainter p(this); p.fillRect(rect(), theme::pal().bg); }
 
 private:
@@ -552,6 +599,7 @@ private:
       m_scroll->setVerticalScrollBarPolicy(phone ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded);
       m_list->setContentsMargins(0, 0, phone ? 0 : 6, 0);
       for (auto* r : std::as_const(m_rows)) r->setPhone(phone);
+      m_checks->setPhone(phone);
     }
     if (scroll != m_scrolling) {
       m_scrolling = scroll;
@@ -562,15 +610,31 @@ private:
     }
   }
 
+  // The next cards, for some 20 ms: the window keeps answering while the list fills. After the first screen they stay
+  // hidden until the last one is made: each card shown lays the whole list out again.
+  void buildSome() {
+    QElapsedTimer t; t.start();
+    const bool first = m_rows.isEmpty();
+    while (m_rows.size() < m_all.size() && (t.elapsed() < 20 || (first && m_rows.size() < kFirst))) {
+      auto* r = new Row(m_all[m_rows.size()], m_scroll->widget());
+      if (m_phone) r->setPhone(true);
+      m_rows << r;
+      if (m_rows.size() <= kFirst) r->setVisible(passes(r->src)); else r->hide();
+      m_list->insertWidget(m_list->count() - 1, r);   // before the stretch
+    }
+    if (m_rows.size() >= m_all.size()) { m_build.stop(); applyFilter(); }
+  }
+
   void refreshAll() {
+    m_checks->refresh();
     int n[5] = {0, 0, 0, 0, 0};
     int keyed = 0;
-    for (auto* r : std::as_const(m_rows)) {
-      r->refresh();
-      n[int(effectiveStatus(r->src))]++;
-      if (r->src.access == sources::Access::Key || r->src.access == sources::Access::Account || !r->src.keyName.isEmpty()) ++keyed;
+    if (m_rows.size() >= m_all.size()) for (auto* r : std::as_const(m_rows)) r->refresh();   // a new card is up to date
+    for (const auto& s : std::as_const(m_all)) {
+      n[int(effectiveStatus(s))]++;
+      if (s.access == sources::Access::Key || s.access == sources::Access::Account || !s.keyName.isEmpty()) ++keyed;
     }
-    const int total = int(m_rows.size());
+    const int total = int(m_all.size());
     // enum order: Waiting, Active, Failing, Disabled
     m_filter->setCounts({total, n[1], n[2], n[3], n[0], keyed});
     m_grid->setCounts({total, n[1], n[2], n[3], n[0], keyed});
@@ -578,22 +642,23 @@ private:
                            .arg(total).arg(n[1]).arg(n[2]).arg(n[3]));
     applyFilter();
   }
-  void applyFilter() {
+  bool passes(const sources::Source& s) const {
     const int f = m_filter->current();
     const QString q = m_search->text().trimmed();
-    for (auto* r : std::as_const(m_rows)) {
-      const auto st = effectiveStatus(r->src);
-      bool ok = f == 0 || (f == 1 && st == sources::Status::Active) || (f == 2 && st == sources::Status::Failing) ||
-                (f == 3 && st == sources::Status::Disabled) || (f == 4 && st == sources::Status::Waiting) ||
-                (f == 5 && (r->src.access == sources::Access::Key || r->src.access == sources::Access::Account || !r->src.keyName.isEmpty()));
-      if (ok && !q.isEmpty())
-        ok = r->src.publisher.contains(q, Qt::CaseInsensitive) || r->src.id.contains(q, Qt::CaseInsensitive) ||
-             r->src.hosts.join(' ').contains(q, Qt::CaseInsensitive) || r->src.data.contains(q, Qt::CaseInsensitive) ||
-             pageNames(r->src.pages).contains(q, Qt::CaseInsensitive);
-      r->setVisible(ok);
-    }
+    const auto st = effectiveStatus(s);
+    const bool ok = f == 0 || (f == 1 && st == sources::Status::Active) || (f == 2 && st == sources::Status::Failing) ||
+                    (f == 3 && st == sources::Status::Disabled) || (f == 4 && st == sources::Status::Waiting) ||
+                    (f == 5 && (s.access == sources::Access::Key || s.access == sources::Access::Account || !s.keyName.isEmpty()));
+    return ok && (q.isEmpty() || s.publisher.contains(q, Qt::CaseInsensitive) || s.id.contains(q, Qt::CaseInsensitive) ||
+                  s.hosts.join(' ').contains(q, Qt::CaseInsensitive) || s.data.contains(q, Qt::CaseInsensitive) ||
+                  pageNames(s.pages).contains(q, Qt::CaseInsensitive));
+  }
+  void applyFilter() {
+    const bool all = m_rows.size() >= m_all.size();
+    for (int i = 0; i < m_rows.size(); ++i) if (all || i < kFirst) m_rows[i]->setVisible(passes(m_rows[i]->src));
   }
 
+  static constexpr int kFirst = 8;   // the cards of the first screen
   QLabel* m_summary;
   QLineEdit* m_search;
   ui::PillBar* m_filter;
@@ -604,7 +669,10 @@ private:
   QScrollArea* m_scroll;
   bool m_phone = false, m_scrolling = false;
   QVBoxLayout* m_list;
-  QList<Row*> m_rows;
+  QList<sources::Source> m_all;   // every source, by publisher
+  QList<Row*> m_rows;             // their cards, in the same order; the last ones may still be to build
+  QTimer m_build;
+  CheckPanel* m_checks;
   QTimer m_tick;
 };
 }  // namespace

@@ -1,7 +1,9 @@
 #include "app/OptionsDialog.h"
 #include "core/I18n.h"
 #include "app/Zoom.h"
+#include "app/Alerts.h"
 #include "app/Background.h"
+#include "app/Backup.h"
 #include "core/Settings.h"
 #include "ui/Kit.h"
 #include "ui/Theme.h"
@@ -14,6 +16,9 @@
 #include <QScrollArea>
 #include <QMainWindow>
 #include <QScrollBar>
+#include <QDesktopServices>
+#include <QDir>
+#include <QUrl>
 #include <cmath>
 #include <QPointer>
 #ifndef Q_OS_IOS
@@ -30,7 +35,14 @@ QString otr(const char* s) { return QCoreApplication::translate("options", s); }
 // The dialog's content, painted: title row, language, themes, footer. Lays itself out for its width (narrow: a phone).
 class Body : public QWidget {
 public:
-  explicit Body(QWidget* parent) : QWidget(parent) { setMouseTracking(true); refreshClaude(); }
+  explicit Body(QWidget* parent) : QWidget(parent) {
+    setMouseTracking(true);
+    refreshClaude();
+    connect(&app::Backup::instance(), &app::Backup::changed, this, [this] {
+      if (auto* d = qobject_cast<OptionsDialog*>(window())) d->fit();
+      update();
+    });
+  }
   int heightFor(int w) const { return layout(w).height; }
 protected:
   void paintEvent(QPaintEvent*) override;
@@ -39,14 +51,15 @@ protected:
   void mouseReleaseEvent(QMouseEvent*) override { m_dragging = false; }
   void leaveEvent(QEvent*) override { if (m_hover != None) { m_hover = None; update(); } }
 private:
-  enum Hit { None, Close, LangEn, LangFr, Restart, McpToggle = 40, McpJournal, McpCode, McpDesktop, DataToggle = 44, ZoomFirst = 50, ThemeFirst = 100 };
+  enum Hit { None, Close, LangEn, LangFr, Restart, McpToggle = 40, McpJournal, McpCode, McpDesktop, DataToggle = 44, AlertResults, AlertProblems, AlertSound, AlertTry, BackupNow,
+             BackupOpen, ZoomFirst = 60, ThemeFirst = 100 };
   struct Area { QRectF r; int id; };
   struct Layout {
     bool narrow = false;
     qreal pad = 26;
     QRectF close, langHint, themeHint, footer;
-    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0, claudeLabelY = 0, dataLabelY = 0;
-    QRectF zoomHint, claudeHint, claudeNote, dataHint;
+    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0, claudeLabelY = 0, dataLabelY = 0, alertLabelY = 0, backupLabelY = 0;
+    QRectF zoomHint, claudeHint, claudeNote, dataHint, alertHint, backupHint;
     QList<Area> areas;
     int height = 0;
   };
@@ -71,10 +84,25 @@ private:
   static QString dataHintText() {
     return otr("Quotes every minute, news and calendar at each source's own pace, even when their page is not shown. A little more battery and network.");
   }
+  static QString alertHintText() {
+    return otr("A Windows notification when a figure is published or when something is wrong with the data. Never on prices.");
+  }
+  static QString backupHintText() {
+    auto& b = app::Backup::instance();
+    if (b.running()) return otr("Copying…");
+    if (!b.error().isEmpty()) return b.error();
+    const QDateTime l = app::Backup::last();
+    return otr("Settings, journal and records, copied once a day on this computer; the last 14 days are kept.") + " " +
+           (l.isValid() ? otr("Last copy: %1.").arg(i18n::locale().toString(l, "d MMM HH:mm")) : otr("No copy yet."));
+  }
   static QString zoomHintText() {
-    return zoom::saved() == zoom::active()
+    QString t = zoom::saved() == zoom::active()
                ? otr("Size of the whole interface. A new zoom applies when Deepwater restarts (Cmd+= / Cmd+- / Cmd+0).")
                : otr("Size of the whole interface. %1 % is chosen: it applies when Deepwater restarts.").arg(zoom::saved());
+#ifndef Q_OS_MACOS
+    t.replace(QLatin1String("Cmd+"), QLatin1String("Ctrl+"));
+#endif
+    return t;
   }
 };
 
@@ -127,6 +155,25 @@ Body::Layout Body::layout(int w) const {
   y = L.dataHint.bottom() + 6;
   L.areas << Area{QRectF(pad, y, inner, 46), DataToggle};
   y += 46;
+#ifdef Q_OS_WIN
+  // alerts: two kinds, the sound, and a button to try one
+  y += 38;
+  L.alertLabelY = y;
+  L.alertHint = QRectF(pad, y + 6, inner, std::max<qreal>(22, hintH(alertHintText())));
+  y = L.alertHint.bottom() + 6;
+  for (int id : {int(AlertResults), int(AlertProblems)}) { L.areas << Area{QRectF(pad, y, inner, 46), id}; y += 46 + 8; }
+  L.areas << Area{QRectF(pad, y, half, 46), AlertSound} << Area{QRectF(pad + half + 10, y, half, 46), AlertTry};
+  y += 46;
+#endif
+#ifndef Q_OS_IOS
+  // the daily copy
+  y += 38;
+  L.backupLabelY = y;
+  L.backupHint = QRectF(pad, y + 6, inner, std::max<qreal>(22, hintH(backupHintText())));
+  y = L.backupHint.bottom() + 6;
+  L.areas << Area{QRectF(pad, y, half, 46), BackupNow} << Area{QRectF(pad + half + 10, y, half, 46), BackupOpen};
+  y += 46;
+#endif
 #ifdef DW_CLAUDE
   // Claude: two switches, then one button for each client
   y += 38;
@@ -281,6 +328,26 @@ void Body::paintEvent(QPaintEvent*) {
   for (const auto& a : L.areas)
     if (a.id == DataToggle) toggle(a, otr("Keep data fresh when its page is not shown"), app::Background::enabled());
 
+  // a button (the Alerts and Backup sections use it)
+  auto button = [&](const Area& a, const QString& text) {
+    const bool hov = a.id == m_hover;
+    p.setPen(QPen(hov ? c.borderHi : c.border, 1));
+    p.setBrush(hov ? c.panelAlt : theme::map("#0e0a05"));
+    p.drawRoundedRect(a.r.adjusted(.5, .5, -.5, -.5), 3, 3);
+    p.setFont(theme::mono(L.narrow ? 10 : 11, QFont::Bold, 1.0)); p.setPen(hov ? c.text : c.textDim);
+    p.drawText(a.r.adjusted(8, 0, -8, 0), Qt::AlignCenter, QFontMetricsF(p.font()).elidedText(text, Qt::ElideRight, a.r.width() - 16));
+  };
+  if (L.alertLabelY > 0) section(L.alertLabelY, otr("ALERTS"), L.alertHint, alertHintText());
+  if (L.backupLabelY > 0) section(L.backupLabelY, otr("BACKUP"), L.backupHint, backupHintText());
+  for (const auto& a : L.areas) {
+    if (a.id == AlertResults) toggle(a, otr("Results of high-impact releases"), app::Alerts::on(app::Alerts::Results));
+    else if (a.id == AlertProblems) toggle(a, otr("Problems found by the data check"), app::Alerts::on(app::Alerts::Problems));
+    else if (a.id == AlertSound) toggle(a, otr("Sound"), app::Alerts::on(app::Alerts::Sound));
+    else if (a.id == AlertTry) button(a, otr("TRY ONE"));
+    else if (a.id == BackupNow) button(a, otr("COPY NOW"));
+    else if (a.id == BackupOpen) button(a, otr("OPEN THE FOLDER"));
+  }
+
 #ifdef DW_CLAUDE
   // Claude
   section(L.claudeLabelY, otr("CLAUDE"), L.claudeHint, claudeHintText());
@@ -327,6 +394,12 @@ void Body::mousePressEvent(QMouseEvent* e) {
   else if (h == LangFr) i18n::setLanguage(i18n::Lang::French);
   else if (h == Restart) zoom::restart();
   else if (h == DataToggle) app::Background::setEnabled(!app::Background::enabled());
+  else if (h == AlertResults) app::Alerts::setOn(app::Alerts::Results, !app::Alerts::on(app::Alerts::Results));
+  else if (h == AlertProblems) app::Alerts::setOn(app::Alerts::Problems, !app::Alerts::on(app::Alerts::Problems));
+  else if (h == AlertSound) app::Alerts::setOn(app::Alerts::Sound, !app::Alerts::on(app::Alerts::Sound));
+  else if (h == AlertTry) app::Alerts::instance().tryOne();
+  else if (h == BackupNow) app::Backup::instance().runNow();
+  else if (h == BackupOpen) { QDir().mkpath(app::Backup::folder()); QDesktopServices::openUrl(QUrl::fromLocalFile(app::Backup::folder())); }
 #ifdef DW_CLAUDE
   else if (h == McpToggle) ai::McpServer::instance().setExternalEnabled(!ai::McpServer::instance().externalEnabled());
   else if (h == McpJournal) ai::McpServer::instance().setJournalIncluded(!ai::McpServer::instance().journalIncluded());

@@ -31,12 +31,14 @@ public:
   // (fullHeight()) and does not scroll itself; setVisibleBand tells it which part of it the page shows, so the
   // column header and the day header stay pinned at the top of that band.
   void setFullHeight(bool on);
+  void openOnToday() { m_openToday = true; }    // the next setEvents() of a week that holds today starts there
   int fullHeight() const { return int(kHeaderH + contentHeight() + 8); }
   void setVisibleBand(double top, double height);
 
 signals:
   void valueClicked(const news::Event& e, int col);
   void contentChanged();                         // rows or expansion changed: fullHeight() may differ
+  void openAt(int y);                            // full-height mode: the page scrolls, to this place of the table
 
 protected:
   void paintEvent(QPaintEvent*) override;
@@ -69,6 +71,7 @@ private:
   double rowH() const { return phone() ? kPhoneRowH : kRowH; }
   double scrollPos() const { return m_full ? m_viewTop : m_scroll; }   // content y shown under the column header
   double headY() const { return m_full ? m_viewTop : 0; }              // where the column header is painted
+  bool m_openToday = false;                      // the week was just opened: to be shown from today
   double contentY(double y) const { return y - kHeaderH - headY() + scrollPos(); }
   void paintGroup(QPainter& p, const QDate& day, double y, bool sticky) const;
   void paintExpand(QPainter& p, const Item& it, double y) const;

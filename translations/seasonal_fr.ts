@@ -495,12 +495,12 @@
     <message>
         <location filename="../src/fundamental/Fundamental.cpp" line="344"/>
         <source> after a hike of %1 bp</source>
-        <translation> après une hausse de %1 bp</translation>
+        <translation> après une hausse de %1 pb</translation>
     </message>
     <message>
         <location filename="../src/fundamental/Fundamental.cpp" line="345"/>
         <source> after a cut of %1 bp</source>
-        <translation> après une baisse de %1 bp</translation>
+        <translation> après une baisse de %1 pb</translation>
     </message>
     <message>
         <location filename="../src/fundamental/Fundamental.cpp" line="346"/>
@@ -1251,7 +1251,7 @@ Teinte : ≥ 0,5 turquoise vif, ≥ 0,15 turquoise sombre, ±0,15 gris, ≤ −0
     <message>
         <location filename="../src/pages/market/fundamental/FundWidgets.cpp" line="311"/>
         <source>%1%2 bp on the month</source>
-        <translation>%1%2 bp sur le mois</translation>
+        <translation>%1%2 pb sur le mois</translation>
     </message>
     <message>
         <location filename="../src/pages/market/fundamental/FundWidgets.cpp" line="360"/>
@@ -1442,6 +1442,30 @@ HAUSSIER ≥ +8 · BAISSIER ≤ −8 · calculé par Deepwater</translation>
         <location filename="../src/pages/market/seasonality/SeasonalityPage.cpp" line="0"/>
         <source>%1: no daily history (%2)</source>
         <translation>%1 : pas d’historique quotidien (%2)</translation>
+    </message>
+    <message>
+        <source>Real rate (CPI)</source>
+        <translation>Taux réel (IPC)</translation>
+    </message>
+    <message>
+        <source>Real rate (core CPI)</source>
+        <translation>Taux réel (sous-jacent)</translation>
+    </message>
+    <message>
+        <source>Q%1 %2</source>
+        <translation>T%1 %2</translation>
+    </message>
+    <message>
+        <source>%1: policy rate %2% − CPI %3% (%4) = %5%</source>
+        <translation>%1 : taux directeur %2% − IPC %3% (%4) = %5%</translation>
+    </message>
+    <message>
+        <source>Carry: %1 and %2 yield the same after inflation</source>
+        <translation>Carry : %1 et %2 rapportent autant après inflation</translation>
+    </message>
+    <message>
+        <source>Carry: %1 yields %2 pt more than %3 after inflation</source>
+        <translation>Carry : %1 rapporte %2 pt de plus que %3 après inflation</translation>
     </message>
 </context>
 </TS>

@@ -1,4 +1,5 @@
 #include "net/Sources.h"
+#include <QCoreApplication>
 #include <QRegularExpression>
 #include <algorithm>
 #include <QHash>
@@ -54,6 +55,20 @@ int parallelForHost(const QString& host) {
   return r.parallelByHost.value(host.toLower(), 1);
 }
 QList<Source> all() { auto& r = reg(); QMutexLocker l(&r.m); return r.list; }
+QString shownPublisher(const QString& p) { return p.isEmpty() ? p : QCoreApplication::translate("sourcecat", p.toUtf8().constData()); }
+Source shown(const Source& s) {
+  const auto tx = [](const QString& t) { return t.isEmpty() ? t : QCoreApplication::translate("sourcecat", t.toUtf8().constData()); };
+  Source o = s;
+  o.publisher = tx(s.publisher);
+  o.terms = tx(s.terms);
+  o.data = tx(s.data);
+  if (o.data == s.data) {   // declared by two services: their texts are joined
+    QStringList parts = s.data.split("; ");
+    for (QString& p : parts) p = tx(p);
+    o.data = parts.join("; ");
+  }
+  return o;
+}
 const Source* byId(const QString& id) {
   auto& r = reg(); QMutexLocker l(&r.m);
   for (const auto& e : r.list) if (e.id == id) return &e;
@@ -106,6 +121,10 @@ QSet<QString> disabledIds() {
   const QStringList l = settings::value("sources.disabled").toStringList();
   return QSet<QString>(l.cbegin(), l.cend());
 }
+QSet<QString> enabledIds() {   // the ones off by default that were switched on
+  const QStringList l = settings::value("sources.enabled").toStringList();
+  return QSet<QString>(l.cbegin(), l.cend());
+}
 }
 
 QString redactUrls(const QString& text) {
@@ -144,6 +163,21 @@ Health health(const QString& id) {
   return out;
 }
 
+QList<Silent> silent(const QDateTime& now) {
+  QList<Silent> out;
+  auto& st = store();
+  for (const Source& s : all()) {
+    if (s.access == Access::Forbidden || isDisabled(s.id)) continue;
+    QList<Health> hosts;
+    for (const auto& host : s.hosts)
+      if (const auto it = st.byHost.constFind(host.toLower()); it != st.byHost.cend() && (it->okCount > 0 || it->failCount > 0)) hosts << *it;
+    if (!isSilent(hosts, now)) continue;
+    const Health h = health(s.id);
+    out << Silent{s.id, s.publisher, h.lastError, h.lastOk, h.failStreak};
+  }
+  return out;
+}
+
 Status status(const QString& id) {
   if (isDisabled(id)) return Status::Disabled;
   const Health h = health(id);
@@ -152,16 +186,25 @@ Status status(const QString& id) {
   return Status::Waiting;
 }
 
-bool isDisabled(const QString& id) { return disabledIds().contains(id); }
+bool isDisabled(const QString& id) {
+  if (disabledIds().contains(id)) return true;
+  const Source* s = byId(id);
+  return s && s->optIn && !enabledIds().contains(id);
+}
 bool isHostDisabled(const QString& host) {
-  const QSet<QString> off = disabledIds();
-  if (off.isEmpty()) return false;
+  const QSet<QString> off = disabledIds(), on = enabledIds();
   const QString h = host.toLower();
   for (const auto& s : all())
-    if (off.contains(s.id)) for (const auto& x : s.hosts) if (x.toLower() == h) return true;
+    if (off.contains(s.id) || (s.optIn && !on.contains(s.id))) for (const auto& x : s.hosts) if (x.toLower() == h) return true;
   return false;
 }
 void setDisabled(const QString& id, bool disabled) {
+  if (const Source* s = byId(id); s && s->optIn) {
+    QSet<QString> on = enabledIds();
+    if (disabled) on.remove(id); else on.insert(id);
+    QStringList l(on.cbegin(), on.cend()); l.sort();
+    if (l.isEmpty()) settings::remove("sources.enabled"); else settings::setValue("sources.enabled", l);
+  }
   QSet<QString> off = disabledIds();
   if (disabled) off.insert(id); else off.remove(id);
   QStringList l(off.cbegin(), off.cend()); l.sort();

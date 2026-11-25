@@ -25,6 +25,7 @@ struct Source {
   QStringList pages;     // pages using it, "tab/sub"
   QString keyName = {};  // settings key "keys.<keyName>" when access == Key
   int parallel = 1;      // requests on the wire at once to one host, paceMs apart (a host answering slowly: Dukascopy)
+  bool optIn = false;    // off until it is switched on in the Sources tab (settings key sources.enabled)
 };
 
 void declare(const Source& s);
@@ -33,6 +34,8 @@ const Source* forHost(const QString& host);
 int paceForHost(const QString& host);
 int parallelForHost(const QString& host);   // the smallest `parallel` among the declarations naming it; 1 if none
 QList<Source> all();
+Source shown(const Source& s);   // the same with its publisher, data and terms in the interface language
+QString shownPublisher(const QString& publisher);
 const Source* byId(const QString& id);
 
 struct Registrar { explicit Registrar(const Source& s) { declare(s); } };
@@ -50,6 +53,13 @@ enum class Status { Waiting, Active, Failing, Disabled };
 Health health(const QString& id);
 Status status(const QString& id);       // Failing: ≥ 2 failures in a row, or never answered and ≥ 1 failure
 void recordResult(const QString& host, bool ok, const QString& error);   // net::Http only
+// Sources that used to answer and have stopped: every host of the source asked lately failed its last requests (two in a
+// row at least), the last answer is between ten minutes and two weeks old and the last failure less than three hours.
+// A source that never answered (a site closed to programs from here) or is switched off is not one.
+struct Silent { QString id, publisher, error; QDateTime lastOk; int failures = 0; };
+QList<Silent> silent(const QDateTime& nowUtc);
+// The rule itself, on one source's hosts (tests).
+bool isSilent(const QList<Health>& hosts, const QDateTime& nowUtc);
 // Network error texts (QNetworkReply::errorString) carry the full URL, and URLs carry keys and tokens (?api_key=…,
 // Telegram /bot<token>/, Discord /webhooks/<id>/<token>). Keeps only scheme://host of every URL in the text.
 // recordResult and net::Http apply it, so no key reaches health.json, the Sources tab or a page's error message.

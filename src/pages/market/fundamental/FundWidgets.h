@@ -118,6 +118,8 @@ class ComparatorCard : public QWidget {
   Q_OBJECT
 public:
   explicit ComparatorCard(QWidget* parent);
+  // 412 px with the seven compared rows; the real rates add two rows and a line
+  static constexpr int kPitch = 31, kRowsTop = 86, kCarryH = fundamental::kRealRows * kPitch + 22, kHeight = 412 + kCarryH;
   void setData(const QString& base, const QList<fundamental::Inputs>& all, const QVector<fundamental::Score>& scores,
                bool ready);
   void setOther(const QString& ccy);

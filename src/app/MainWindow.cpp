@@ -4,6 +4,7 @@
 #include <QApplication>
 #include "app/NavDrawer.h"
 #include "app/MainWindow.h"
+#include "app/Alerts.h"
 #include "app/Header.h"
 #include "app/Pages.h"
 #include "core/Settings.h"
@@ -51,6 +52,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   connect(m_header, &Header::optionsRequested, this, &MainWindow::showOptions);
   connect(m_header, &Header::helpRequested, this, [this] { showHelp(); });
   connect(m_header, &Header::updateRequested, this, &MainWindow::showUpdates);
+  connect(m_header, &Header::checksRequested, this, [this] { openPage(QStringLiteral("sources/sources")); });
+  connect(&app::Alerts::instance(), &app::Alerts::openRequested, this, [this](const QString& page) {   // a notification was clicked
+    if (isMinimized()) showNormal();
+    raise(); activateWindow();
+    openPage(page);
+  });
   m_drawer = new app::NavDrawer(central);
   connect(m_header, &Header::menuRequested, this, [this] { m_drawer->open(m_header->currentMain(), m_header->currentSub()); });
   connect(m_drawer, &app::NavDrawer::navigate, this, &MainWindow::open);

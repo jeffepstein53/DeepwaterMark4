@@ -208,9 +208,9 @@ public:
   }
   // Why a host may not be contacted (disabled in the Sources tab, forbidden by its terms); empty when it may.
   static QString refusal(const QString& host) {
-    if (sources::isHostDisabled(host)) return QStringLiteral("source disabled in the Sources tab");
+    if (sources::isHostDisabled(host)) return QCoreApplication::translate("sources", "source switched off in the Sources tab");
     if (const auto* s = sources::forHost(host); s && s->access == sources::Access::Forbidden)
-      return "source forbidden by its terms: " + s->id;
+      return QCoreApplication::translate("sources", "source closed to programs by its terms: %1").arg(s->id);
     return {};
   }
 

@@ -7,6 +7,7 @@
 #include "market/Instruments.h"
 #include "analytics/Technical.h"
 #include "macro/CentralBanks.h"
+#include "macro/KeyFigures.h"
 #include "macro/MacroStore.h"
 #include "positioning/Cot.h"
 #include "positioning/Retail.h"
@@ -71,6 +72,8 @@ InstrumentSheet::InstrumentSheet(QWidget* parent) : QWidget(parent) {
   // services feeding the cards; each refills its card while a symbol is open
   connect(&positioning::Retail::instance(), &positioning::Retail::changed, this, [this] { if (!m_symbol.isEmpty()) feedRetail(); });
   connect(&macro::MacroStore::instance(), &macro::MacroStore::updated, this, [this] { if (!m_symbol.isEmpty()) feedMacro(); });
+  macro::KeyFigures::instance().start();
+  connect(&macro::KeyFigures::instance(), &macro::KeyFigures::changed, this, [this] { if (!m_symbol.isEmpty() && isVisible()) feedMacro(); });
   connect(&macro::CentralBanks::instance(), &macro::CentralBanks::updated, this, [this] { if (!m_symbol.isEmpty()) feedMeetings(); });
 }
 
@@ -318,7 +321,20 @@ void InstrumentSheet::feedMacro() {
   bool any = false;
   for (const auto& c : cm) {
     QString tip;
-    if (c.policy.valid()) { rows[0].values << fmt::num(c.policy.rate, 2) + "%"; rows[0].tips << QString("%1 · %2").arg(i18n::locale().toString(c.policy.asOf, "dd MMM yyyy"), c.policy.sourceName); any = true; }
+    const auto shortPeriod = [](const QDate& d, char freq) -> QString {
+      if (!d.isValid()) return {};
+      if (freq == 'A') return QString::number(d.year());
+      if (freq == 'Q') return QCoreApplication::translate("economy", "Q%1 %2").arg((d.month() - 1) / 3 + 1).arg(d.toString("yy"));
+      return i18n::locale().toString(d, freq == 'D' ? "d MMM" : "MMM yy");
+    };
+    rows[0].dates << (c.policy.valid() ? shortPeriod(c.policy.asOf, 'D') : QString());
+    const auto checked = [&c](const QString& t, const char* figure) {
+      const QString k = t.isEmpty() ? QString() : macro::checkTip(c.currency, QLatin1String(figure));
+      return k.isEmpty() ? t : t + "\n" + k;
+    };
+    static const char* const figures[] = {"GDP q/q", "CPI y/y", "Unemployment"};
+    rows[0].differs << macro::checkDiffers(c.currency, "Policy rate");
+    if (c.policy.valid()) { rows[0].values << fmt::num(c.policy.rate, 2) + "%"; rows[0].tips << checked(QString("%1 · %2").arg(i18n::locale().toString(c.policy.asOf, "dd MMM yyyy"), c.policy.sourceName), "Policy rate"); any = true; }
     else { rows[0].values << fmt::dash(); rows[0].tips << QString(); }
     const QList<QPair<macro::Ind, const macro::Latest*>> cells{{macro::Ind::GdpQoq, &c.gdpQoq}, {macro::Ind::Inflation, &c.inflation},
                                                                {macro::Ind::Unemployment, &c.unemployment}, {macro::Ind::BusinessConf, &c.businessConfidence}};
@@ -326,7 +342,10 @@ void InstrumentSheet::feedMacro() {
       tip.clear();
       rows[k + 1].values << latestCell(cells[k].first, *cells[k].second, tip);
       if (k == 3) tip += (tip.isEmpty() ? "" : "\n") + QCoreApplication::translate("watch", "100 = long-run average. ") + c.pmiNote;
+      else tip = checked(tip, figures[k]);
+      rows[k + 1].differs << (k < 3 && macro::checkDiffers(c.currency, QLatin1String(figures[k])));
       rows[k + 1].tips << tip;
+      rows[k + 1].dates << (cells[k].second->valid() ? shortPeriod(cells[k].second->period, cells[k].second->freq) : QString());
       any |= cells[k].second->valid();
     }
   }
@@ -352,7 +371,8 @@ void InstrumentSheet::feedMeetings() {
       for (int k = 0; k < 5; ++k) d.buckets << MeetingBucket{labels[k], o.at(k) * 100.0};
       m_meeting->setBank(i, d);
     } else {
-      m_meeting->setBankState(i, SheetCard::NotConnected, b->pricingNote.isEmpty() ? QCoreApplication::translate("watch", "No market pricing for this bank yet.") : b->pricingNote);
+      const bool reading = b->pricingNote == QCoreApplication::translate("economy", "Reading what the market prices…");
+      m_meeting->setBankState(i, reading ? SheetCard::Message : SheetCard::NotConnected, b->pricingNote.isEmpty() ? QCoreApplication::translate("watch", "No market pricing for this bank yet.") : b->pricingNote);
     }
   }
 }

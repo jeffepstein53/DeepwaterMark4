@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include "pages/global/overview/FeedPanels.h"
 #include "macro/CentralBanks.h"
+#include "macro/KeyFigures.h"
 #include "macro/Registry.h"
 #include "market/Instruments.h"
 #include "news/Translate.h"
@@ -274,7 +275,7 @@ void OverviewData::pushBanks() {
     const macro::Bank* b = cb.bank(key);
     if (!b) continue;
     CentralBankRow r;
-    r.name = b->code;
+    r.name = b->shownCode();
     r.currency = b->currency;
     r.flag = b->iso2 == "ez" ? "eu" : b->iso2;
     r.rate = b->rate;
@@ -289,10 +290,11 @@ void OverviewData::pushBanks() {
     if (b->priced && o.valid()) {
       r.cut = o.cut() * 100; r.hold = o.hold * 100; r.hike = o.hike() * 100;
       r.oddsSource = QCoreApplication::translate("global", "Next meeting odds %1").arg(b->pricingSource) +
-                     (b->pricedAt.isValid() ? " (" + i18n::locale().toString(b->pricedAt.toLocalTime(), "dd MMM HH:mm") + ")" : QString()) +
+                     (b->pricedDay.isValid() ? QString() : b->pricedAt.isValid() ? " (" + i18n::locale().toString(b->pricedAt.toLocalTime(), "dd MMM HH:mm") + ")" : QString()) +
                      (b->pricingNote.isEmpty() ? QString() : "\n" + b->pricingNote);
+      if (const QString t = macro::checkTip(b->currency, "Odds"); !t.isEmpty()) r.oddsSource += "\n" + t;
     } else {
-      r.oddsSource = b->pricingNote.isEmpty() ? QCoreApplication::translate("global", "No free market pricing for %1 yet.").arg(b->code) : b->pricingNote;
+      r.oddsSource = b->pricingNote.isEmpty() ? QCoreApplication::translate("global", "No free market pricing for %1 yet.").arg(b->shownCode()) : b->pricingNote;
     }
     out.rows << r;
   }

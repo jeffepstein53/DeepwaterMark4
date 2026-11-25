@@ -14,6 +14,7 @@ Deepwater Mark 4 is a market terminal installed on the user's PC. This plugin gi
 ## Which tool for what
 - **Now**: `get_market_hours` (which forex sessions are open), `get_quotes` (live prices), `get_squawk` (the live wire), `get_news`.
 - **Calendar and economy**: `get_economic_calendar` (use `days_back`, `days_ahead`, `currency`, `min_impact`), `get_macro_data`, `get_central_banks`, `get_bank_forecasts`, `get_bank_research`.
+- **Can a figure be trusted**: `get_data_checks` (each key figure against a second source, the sources that have stopped answering, the results still missing). When it says two sources differ, give both.
 - **Positioning and mood**: `get_cot`, `get_retail_sentiment`, `get_risk_sentiment`.
 - **Reading a market**: `get_price_history`, `get_technical_read`, `get_liquidity_pools`, `get_seasonality`, `get_fundamental_scores`.
 - **What Deepwater records itself**: `get_macro_chains` then `get_macro_facts`; `get_technical_coverage` then `get_technical_data`; order flow with `get_footprint`, `get_order_book`, `get_open_interest`.

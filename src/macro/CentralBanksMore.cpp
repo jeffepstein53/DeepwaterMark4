@@ -3,11 +3,14 @@
 #include "macro/CentralBanksImpl.h"
 #include "macro/Csv.h"
 #include "macro/Ocr.h"
+#include "macro/RateTables.h"
 #include "macro/Xlsx.h"
 #include "net/Http.h"
 #include "net/Sources.h"
+#include "core/I18n.h"
 #include "core/Paths.h"
 #include "wire/Wire.h"
+#include <QFileInfo>
 #include <QtConcurrent>
 #include <QFutureWatcher>
 #include <QFile>
@@ -34,6 +37,11 @@ const sources::Registrar regEurex({"eurex", "Eurex (Deutsche Börse) public prod
     sources::Access::Keyless, 30000, "3M SARON futures (FSR3) daily settlement prices",
     "Delayed public data from Eurex's own product page API, personal display; robots.txt crawl-delay 30 s respected "
     "(requests 30 s apart), past days cached 30 days", {"economy/rates", "global/overview"}});
+
+const sources::Registrar regTe({"tradingeconomics", "Trading Economics (implied rates page)", {"tradingeconomics.com"},
+    sources::Access::Keyless, 60000, "What the market prices for the RBA's next meeting, and for the other banks' as a second reading",
+    "Public page, robots.txt restricts nothing; personal display, the source credited; off until it is switched on in the Sources tab; "
+    "one page at most every 2 hours, not asked again the same day after a refusal", {"economy/rates", "global/overview"}, {}, 1, true});
 
 QDate parseYmd(const QString& s) { return QDate::fromString(s, "yyyyMMdd"); }
 
@@ -119,7 +127,7 @@ void CentralBanks::loadBoePricing() {
   }
   m_boeWaits = 0;
   if (!std::isfinite(b->rate)) return;   // no Bank Rate from IADB or BIS: the next refresh (ensureLoaded) tries again
-  net::Request r; r.ttlSec = 6 * 3600; r.timeoutMs = 60000;
+  net::Request r; r.ttlSec = 2 * 3600; r.timeoutMs = 60000;
   r.url = QUrl("https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip");
   net::get(r, this, [this](const net::Reply& rep) {
     Bank* bb = mut("BOE");
@@ -168,6 +176,7 @@ void CentralBanks::loadBoePricing() {
       const bool noSonia = !std::isfinite(soniaOn(rows.last().date));
       m_boeNoSonia = noSonia;
       applyRates(*bb, meets, r0, r);
+      bb->pricedDay = rows.last().date;
       bb->impliedBpWeekAgo = NAN;
       for (int i = rows.size() - 1; i >= 0; --i)
         if (rows[i].date <= rows.last().date.addDays(-7)) {
@@ -209,7 +218,7 @@ void CentralBanks::loadBojPricing() {
     }
     Bank* b = mut("BOJ");
     if (!std::isfinite(b->overnight)) { b->pricingNote = QCoreApplication::translate("economy", "Bank of Japan TONA series did not answer."); changed(); return; }
-    net::Request ix; ix.ttlSec = 3 * 3600;
+    net::Request ix; ix.ttlSec = 3600;
     ix.url = QUrl("https://www.jpx.co.jp/english/markets/derivatives/settlement-price/index.html");
     net::get(ix, this, [this](const net::Reply& ir) {
       const auto m = QRegularExpression("href=\"([^\"]*rb_e(\\d{8})\\.csv)\"").match(QString::fromUtf8(ir.body));
@@ -241,12 +250,15 @@ void CentralBanks::loadBojPricing() {
         detail::recordSnapshots("odds-boj.json", t, g);
         const QList<MeetingDate> meets = bb->upcoming(10);
         QVector<QDate> eff; for (const auto& md : meets) eff << md.decision.addDays(1);
-        detail::computeFromQuotes(*bb, eff, meets, contracts, g, 1);
+        QDateTime splitAt; bool shared = false;
+        detail::computeFromQuotes(*bb, eff, meets, contracts, g, 1, detail::pictureHint(*bb, meets, &splitAt));
+        bb->pricedDay = fileDate;
         bb->pricingSourceEn = QStringLiteral("computed by Deepwater from JPX/OSE 3-month TONA futures settlement prices and the BoJ's TONA");
         bb->pricingSource = QCoreApplication::translate("economy", "computed by Deepwater from JPX/OSE 3-month TONA futures settlement prices of %1 (jpx.co.jp) and the BoJ's TONA")
                               .arg(fileDate.toString("yyyy-MM-dd"));
         bb->pricingNote = bb->priced ? QString() : QCoreApplication::translate("economy", "3-month TONA futures did not cover the next meeting.");
-        bb->pricingNote = detail::withSharedContractCaveat(bb->pricingNote, *bb, eff, contracts);
+        bb->pricingNote = detail::withSharedContractCaveat(bb->pricingNote, *bb, eff, contracts, splitAt, &shared);
+        m_split["BOJ"] = shared ? splitAt : QDateTime();
         bb->historySource = "daily settlements recorded by this app";
         changed();
       });
@@ -256,9 +268,17 @@ void CentralBanks::loadBojPricing() {
 
 // ------------------------------------------------------------------------------------------------ SNB
 void CentralBanks::loadSnbPricing() {
+  // the policy rate and SARON (loadRates) may come after settlements served from the cache: waited for a minute
+  if (const Bank* s = mut("SNB"); !std::isfinite(s->rate) || !std::isfinite(s->overnight)) {
+    if (m_snbWaits < 12) { ++m_snbWaits; QTimer::singleShot(5000, this, [this] { loadSnbPricing(); }); return; }
+    m_snbWaits = 0;
+    m_started.remove("snbpricing");   // the next refresh tries again
+    return;
+  }
+  m_snbWaits = 0;
   struct Day { QDate date; QHash<QString, double> px; };   // contract start yyyyMMdd → settlement
   auto days = std::make_shared<QMap<QDate, QHash<QString, double>>>();
-  auto compute = [this, days] {
+  auto compute = [this, days] {   // (the settlement days of the last month)
     Bank* b = mut("SNB");
     if (days->isEmpty() || !std::isfinite(b->overnight) || !std::isfinite(b->rate)) return;
     QList<QPair<QString, RateContract>> contracts;
@@ -277,13 +297,16 @@ void CentralBanks::loadSnbPricing() {
     }
     const QList<MeetingDate> meets = b->upcoming(10);
     QVector<QDate> eff; for (const auto& md : meets) eff << md.decision.addDays(1);
-    detail::computeFromQuotes(*b, eff, meets, contracts, g, 1);
+    QDateTime splitAt; bool shared = false;
+    detail::computeFromQuotes(*b, eff, meets, contracts, g, 1, detail::pictureHint(*b, meets, &splitAt));
+    b->pricedDay = days->lastKey();
     b->pricingSourceEn = QStringLiteral("computed by Deepwater from Eurex 3M SARON futures (FSR3) daily settlement prices and the SNB's SARON");
     b->pricingSource = QCoreApplication::translate("economy", "computed by Deepwater from Eurex 3M SARON futures (FSR3) daily settlement prices of %1 (eurex.com, delayed public data) and the SNB's SARON")
                          .arg(days->lastKey().toString("yyyy-MM-dd"));
     b->pricingNote = b->priced ? QCoreApplication::translate("economy", "Settlements come from bid/ask quotes on most days (few trades).")
                                : QCoreApplication::translate("economy", "3M SARON futures did not cover the next meeting.");
-    b->pricingNote = detail::withSharedContractCaveat(b->pricingNote, *b, eff, contracts);
+    b->pricingNote = detail::withSharedContractCaveat(b->pricingNote, *b, eff, contracts, splitAt, &shared);
+    m_split["SNB"] = shared ? splitAt : QDateTime();
     b->historySource = "daily settlements";
     changed();
   };
@@ -300,7 +323,7 @@ void CentralBanks::loadSnbPricing() {
     if (date && !td.isEmpty()) *date = QDate::fromString(td[0].toString().left(10), "dd-MM-yyyy");
     return px;
   };
-  net::Request r; r.ttlSec = 6 * 3600;
+  net::Request r; r.ttlSec = 2 * 3600;
   r.url = QUrl("https://www.eurex.com/api/v1/overallstatistics/1410330?filtertype=overview");
   net::get(r, this, [this, days, compute, parse](const net::Reply& rep) {
     if (!rep.ok()) { mut("SNB")->pricingNote = QCoreApplication::translate("economy", "Eurex statistics did not answer (%1).").arg(rep.error); changed(); return; }
@@ -325,163 +348,432 @@ void CentralBanks::loadSnbPricing() {
 }
 
 // ------------------------------------------------------------------------------------------------ RBA / RBNZ
+// FinancialJuice's daily picture first (whole path); when it is more than 36 market hours old, the newest of it, the
+// weekly investingLive article and, for the RBA, Trading Economics' page (a source switched off by default).
 namespace {
-struct FjRow { QDate meeting; double implied = NAN, move = NAN, total = NAN; };
-struct FjTable { QString bank; QDate date; QString url; double effective = NAN; QList<FjRow> rows; QString reason; };
+constexpr qint64 kPictureFreshSec = 36 * 3600;
 
-QDate fjDate(const QString& token, const QDate& ref) {
-  static const QStringList months{"jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"};
-  const QString t = token.toLower();
-  auto m1 = QRegularExpression("(\\d{1,2})[\\s/-]*([a-z]{3})[a-z]*[\\s/-]*'?(\\d{2,4})?").match(t);
-  auto m2 = QRegularExpression("([a-z]{3})[a-z]*[\\s/-]*(\\d{1,2})(?:[\\s,/-]+'?(\\d{2,4}))?").match(t);
-  int d = 0, mo = 0, y = 0;
-  if (m1.hasMatch() && months.contains(m1.captured(2))) { d = m1.captured(1).toInt(); mo = months.indexOf(m1.captured(2)) + 1; y = m1.captured(3).toInt(); }
-  else if (m2.hasMatch() && months.contains(m2.captured(1))) { mo = months.indexOf(m2.captured(1)) + 1; d = m2.captured(2).toInt(); y = m2.captured(3).toInt(); }
-  else return {};
-  if (y > 0 && y < 100) y += 2000;
-  if (y == 0) { y = ref.year(); if (QDate(y, mo, 1) < ref.addMonths(-1)) ++y; }
-  return QDate(y, mo, d);
+QString tablesFile() { return paths::data("macro") + "/fj-tables.json"; }
+// Its content, read again only when it has changed (all eight banks' tables of the last weeks).
+QJsonObject tables(bool* ok) {
+  static QJsonObject kept;
+  static QDateTime at;
+  static qint64 size = -1;
+  const QFileInfo f(tablesFile());
+  *ok = true;
+  if (f.exists() && at.isValid() && f.lastModified() == at && f.size() == size) return kept;
+  kept = detail::readJson(tablesFile(), ok).object();
+  const QFileInfo g(tablesFile());
+  at = *ok && g.exists() ? g.lastModified() : QDateTime();
+  size = g.exists() ? g.size() : -1;
+  return kept;
 }
 
-// Rows of OCR text → table, validated: totals = running sum of moves (±1.5 bp), implied - total/100 constant
-// (the effective rate, ±0.03) and close to the policy rate (±0.35).
-FjTable parseFj(const QList<ocr::Line>& lines, const QString& bank, const QDate& published, double policy) {
-  FjTable t; t.bank = bank; t.date = published;
-  QList<QList<ocr::Line>> rows;
-  QList<ocr::Line> sorted = lines;
-  std::sort(sorted.begin(), sorted.end(), [](const ocr::Line& a, const ocr::Line& b) { return a.box.center().y() < b.box.center().y(); });
-  for (const auto& l : sorted) {
-    if (!rows.isEmpty() && std::fabs(rows.last().first().box.center().y() - l.box.center().y()) < l.box.height() * 0.6) rows.last() << l;
-    else rows << QList<ocr::Line>{l};
-  }
-  QRegularExpression num("([-+]?\\d+(?:\\.\\d+)?)");
-  for (auto& r : rows) {
-    std::sort(r.begin(), r.end(), [](const ocr::Line& a, const ocr::Line& b) { return a.box.left() < b.box.left(); });
-    QString text; for (const auto& l : r) text += l.text + "  ";
-    const QDate md = fjDate(r.first().text, published);
-    if (!md.isValid()) continue;
-    QVector<double> nums;
-    QString rest = text.mid(r.first().text.size());
-    for (auto it = num.globalMatch(rest); it.hasNext();) nums << it.next().captured(1).toDouble();
-    if (nums.size() < 3) continue;
-    FjRow fr; fr.meeting = md;
-    // implied rate: the value closest to the policy rate with a decimal point
-    int bi = -1; double bd = 1e9;
-    for (int k = 0; k < nums.size(); ++k) if (std::fabs(nums[k] - policy) < bd && std::fabs(nums[k]) < 25) { bd = std::fabs(nums[k] - policy); bi = k; }
-    if (bi < 0 || bd > 1.5) continue;
-    fr.implied = nums[bi];
-    QVector<double> others; for (int k = 0; k < nums.size(); ++k) if (k != bi) others << nums[k];
-    fr.move = others.value(0, NAN); fr.total = others.value(1, NAN);
-    t.rows << fr;
-  }
-  if (t.rows.size() < 2) { t.reason = QCoreApplication::translate("economy", "fewer than two meeting rows recognised"); t.rows.clear(); return t; }
-  // validate (try both orders of move/total)
-  for (int pass = 0; pass < 2; ++pass) {
-    bool good = true; double run = 0, eff = NAN;
-    for (auto& r : t.rows) {
-      const double mv = pass == 0 ? r.move : r.total, tot = pass == 0 ? r.total : r.move;
-      if (!std::isfinite(mv) || !std::isfinite(tot)) { good = false; break; }
-      run += mv;
-      if (std::fabs(run - tot) > 1.5) { good = false; break; }
-      const double e = r.implied - tot / 100.0;
-      if (!std::isfinite(eff)) eff = e; else if (std::fabs(e - eff) > 0.03) { good = false; break; }
-    }
-    if (good && std::fabs(eff - policy) <= 0.35) {
-      if (pass == 1) for (auto& r : t.rows) std::swap(r.move, r.total);
-      t.effective = eff;
-      return t;
-    }
-  }
-  t.reason = QCoreApplication::translate("economy", "the recognised table did not validate (moves do not add up to the totals or rates are inconsistent)");
-  t.rows.clear();
+const QRegularExpression& pictureRx() {
+  static const QRegularExpression rx("^(RBA|RBNZ|Fed|FOMC|ECB|BoE|BoJ|BoC|SNB)\\b.*Interest Rate Probabilit", QRegularExpression::CaseInsensitiveOption);
+  return rx;
+}
+QString pictureBank(const wire::Item& it) {
+  const QString id = pictureRx().match(it.text).captured(1).toUpper();
+  return id == "FOMC" ? QStringLiteral("FED") : id;
+}
+bool isPicture(const wire::Item& it) { return it.source == "FinancialJuice" && !it.url.isEmpty() && pictureRx().match(it.text).hasMatch(); }
+bool isWeekly(const wire::Item& it) {
+  static const QRegularExpression rx("^How have interest rate expectations changed", QRegularExpression::CaseInsensitiveOption);
+  return it.source == "investingLive" && !it.url.isEmpty() && rx.match(it.text).hasMatch();
+}
+QDateTime when(const QJsonObject& o) {
+  QDateTime t = QDateTime::fromString(o.value("published").toString(), Qt::ISODate);
+  if (t.isValid()) t.setTimeZone(QTimeZone::UTC);
   return t;
 }
+QString shownTime(const QDateTime& t) { return i18n::locale().toString(t.toLocalTime(), "dd MMM HH:mm"); }
+// What is known was published since the bank's last decision.
+bool usableSince(const QJsonObject& o, const Bank& b) {
+  QDate lastDecision;
+  for (const auto& m : b.meetings) if (m.decision < QDate::currentDate()) lastDecision = m.decision;
+  const QDateTime t = when(o);
+  return t.isValid() && t.date() >= lastDecision;
+}
+}
+
+qint64 CentralBanks::marketSeconds(QDateTime a, const QDateTime& b) {
+  qint64 s = 0;
+  for (; a < b; ) {
+    const QDateTime next = std::min(b, QDateTime(a.date().addDays(1), QTime(0, 0), QTimeZone::UTC));
+    if (a.date().dayOfWeek() <= 5) s += a.secsTo(next);
+    a = next;
+  }
+  return s;
+}
+
+detail::Hint detail::pictureHint(const Bank& b, const QList<MeetingDate>& meets, QDateTime* at) {
+  *at = QDateTime();
+  bool ok = true;
+  const QJsonObject pic = tables(&ok).value(b.id).toObject();
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  if (!usableSince(pic, b) || CentralBanks::marketSeconds(when(pic), now) > 5 * 24 * 3600) return {};
+  struct Table { qint64 t; QVector<double> moves; };
+  QList<Table> tables;
+  QJsonArray all = pic.value("older").toArray();
+  all.append(pic);
+  for (const auto& v : all) {
+    const QJsonObject o = v.toObject();
+    QHash<QString, double> byMonth;
+    for (const auto& rv : o.value("rows").toArray()) byMonth.insert(rv.toObject().value("month").toString(), rv.toObject().value("move").toDouble());
+    Table x{when(o).toSecsSinceEpoch(), {}};
+    for (const auto& m : meets) x.moves << byMonth.value(m.decision.toString("yyyy-MM"), NAN) / 100.0;
+    if (when(o).isValid()) tables << x;
+  }
+  if (tables.isEmpty() || !std::isfinite(tables.last().moves.value(0, NAN))) return {};
+  std::sort(tables.begin(), tables.end(), [](const Table& a, const Table& c) { return a.t < c.t; });
+  *at = when(pic);
+  return [tables](qint64 t) {   // the table known at that moment; before the first one, the first
+    const Table* best = &tables.first();
+    for (const auto& x : tables) if (x.t <= t) best = &x;
+    return best->moves;
+  };
+}
+
+QDateTime CentralBanks::pictureAt(const QString& id) const {
+  bool ok = true;
+  return when(tables(&ok).value(id).toObject());
+}
+
+QList<OtherOdds> CentralBanks::otherOdds(const QString& id) const {
+  QList<OtherOdds> out;
+  const Bank* b = bank(id);
+  if (!b) return out;
+  const MeetingDate next = b->nextMeeting();
+  if (!next.decision.isValid()) return out;
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  bool ok = true;
+  const QJsonObject all = tables(&ok);
+  const auto add = [&](const QString& source, double bp, const QDateTime& at, const QDate& meeting, bool used) {
+    if (std::isfinite(bp) && at.isValid()) out << OtherOdds{source, bp, at, meeting, marketSeconds(at, now) <= kPictureFreshSec, used};
+  };
+  if (const QJsonObject pic = all.value(b->id).toObject(); usableSince(pic, *b))
+    for (const auto& rv : pic.value("rows").toArray()) {
+      const QJsonObject r = rv.toObject();
+      if (r.value("month").toString() != next.decision.toString("yyyy-MM")) continue;
+      const bool own = b->pricingSourceEn.startsWith("FinancialJuice");
+      add(QStringLiteral("FinancialJuice"), r.value("move").toDouble(NAN), when(pic), {}, own || m_split.value(b->id).isValid());
+      break;
+    }
+  if (const QJsonObject te = all.value("TE").toObject(); usableSince(te, *b)) {
+    const bool own = b->pricingSourceEn.startsWith("Trading Economics");
+    const QJsonObject o = te.value("banks").toObject().value(b->id).toObject();
+    const QDate meeting = QDate::fromString(o.value("meeting").toString(), Qt::ISODate);
+    const bool wired = b->id == "RBA" && te.contains("bp");
+    const qsizetype n = out.size();
+    add(QStringLiteral("Trading Economics"), wired ? te.value("bp").toDouble(NAN) : o.value("bp").toDouble(NAN), when(te), meeting, own);
+    if (!wired && out.size() > n) out.last().level = o.value("rate").toDouble(NAN);
+  }
+  if (const QJsonObject wk = all.value("weekly").toObject(); usableSince(wk, *b))
+    add(QStringLiteral("investingLive"), wk.value("banks").toObject().value(b->id).toObject().value("nextBp").toDouble(NAN), when(wk), {},
+        b->pricingSourceEn.startsWith("investingLive"));
+  return out;
 }
 
 void CentralBanks::applyFjTable(const QString& id) {
   Bank* b = mut(id);
-  QFile f(paths::data("macro") + "/fj-tables.json");
-  if (!f.open(QIODevice::ReadOnly)) return;
-  const auto o = QJsonDocument::fromJson(f.readAll()).object().value(id).toObject();
-  const auto rows = o.value("rows").toArray();
-  if (rows.isEmpty() || !std::isfinite(b->rate)) return;
-  const double eff = o.value("effective").toDouble();
+  bool ok = true;
+  const QJsonObject all = tables(&ok);
+  if (!std::isfinite(b->rate)) return;
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  const auto usable = [&](const QJsonObject& o) { return usableSince(o, *b); };
+
+  const QJsonObject pic = all.value(id).toObject();
+  struct Single { QDateTime at; double bp = NAN; QString en, shown; };
+  Single best;
+  const auto offer = [&best](const Single& s) { if (std::isfinite(s.bp) && s.at.isValid() && (!best.at.isValid() || s.at > best.at)) best = s; };
+  if (const QJsonObject te = all.value("TE").toObject(); id == "RBA" && usable(te) && te.contains("bp"))
+    offer({when(te), te.value("bp").toDouble(), QStringLiteral("Trading Economics, Australia implied rates"),
+           QCoreApplication::translate("economy", "source: Trading Economics, page read on %1 (next meeting only)").arg(shownTime(when(te)))});
+  if (const QJsonObject wk = all.value("weekly").toObject(); usable(wk))
+    if (const QJsonObject o = wk.value("banks").toObject().value(id).toObject(); !o.isEmpty())
+      offer({when(wk), o.value("nextBp").toDouble(), QStringLiteral("investingLive weekly article on rate expectations"),
+             QCoreApplication::translate("economy", "source: investingLive, weekly article of %1 (next meeting only)").arg(shownTime(when(wk)))});
+
   QList<MeetingDate> meets; QVector<double> r;
-  for (const auto& rv : rows) {
-    const auto ro = rv.toObject();
-    const QDate d = QDate::fromString(ro.value("meeting").toString(), "yyyy-MM-dd");
-    if (d < QDate::currentDate()) continue;
-    MeetingDate md; md.decision = d; md.first = d;
-    for (const auto& known : b->meetings) if (known.decision == d) md = known;
-    meets << md; r << eff + ro.value("total").toDouble() / 100.0;
+  double eff = NAN;
+  QDateTime published;
+  if (usable(pic)) {
+    published = when(pic);
+    eff = pic.value("effective").toDouble();
+    for (const auto& rv : pic.value("rows").toArray()) {
+      const auto ro = rv.toObject();
+      const QDate month = QDate::fromString(ro.value("month").toString() + "-01", "yyyy-MM-dd");
+      MeetingDate md;
+      for (const auto& known : b->meetings)
+        if (known.decision.year() == month.year() && known.decision.month() == month.month()) md = known;
+      if (md.decision.isValid() && md.decision < QDate::currentDate()) continue;
+      if (!md.decision.isValid()) break;   // a meeting whose day is not known: the path stops before it
+      meets << md; r << eff + ro.value("total").toDouble() / 100.0;
+    }
   }
-  if (meets.isEmpty()) { b->priced = false; b->pricingNote = QCoreApplication::translate("economy", "The last FinancialJuice table only covers past meetings."); return; }
-  b->overnight = eff;
-  applyRates(*b, meets, eff, r);
-  b->impliedBpWeekAgo = NAN;
-  b->history.clear();
-  b->historySource = "one table per published picture";
-  b->pricingSourceEn = QStringLiteral("FinancialJuice probability pictures, read by Deepwater (OCR, validated)");
-  b->pricingSource = QCoreApplication::translate("economy", "source: FinancialJuice picture of %1, OCR by Deepwater (validated)").arg(o.value("published").toString());
-  b->pricingNote.clear();
+  const bool pictureUsed = !meets.isEmpty() && (marketSeconds(published, now) <= kPictureFreshSec || !best.at.isValid() || published >= best.at);
+  if (pictureUsed) {
+    b->overnight = eff;
+    applyRates(*b, meets, eff, r);
+    b->pricedAt = published.toLocalTime();
+    // one sample per kept picture, and the change priced a week before for the same meeting
+    b->history.clear(); b->impliedBpWeekAgo = NAN;
+    const QString firstMonth = meets.first().decision.toString("yyyy-MM");
+    QJsonArray hist = pic.value("older").toArray();
+    hist.append(pic);
+    for (const auto& hv : hist) {
+      const QJsonObject ho = hv.toObject();
+      const QDateTime t = when(ho);
+      const double e0 = ho.value("effective").toDouble();
+      QVector<double> hr;
+      double first = NAN;
+      for (const auto& rv : ho.value("rows").toArray()) {
+        const auto ro = rv.toObject();
+        if (ro.value("month").toString() < firstMonth) continue;
+        if (ro.value("month").toString() == firstMonth) first = ro.value("move").toDouble();
+        hr << e0 + ro.value("total").toDouble() / 100.0;
+      }
+      if (!t.isValid() || hr.isEmpty()) continue;
+      OddsSample s; s.t = t; s.meetings = oddsFromPath(e0, hr).mid(0, b->path.size());
+      b->history << s;
+      if (t.date() <= published.date().addDays(-7) && std::isfinite(first)) b->impliedBpWeekAgo = first;
+    }
+    b->historySource = "one table per published picture";
+    b->pricingSourceEn = QStringLiteral("FinancialJuice probability pictures, read by Deepwater (OCR, validated)");
+    b->pricingSource = QCoreApplication::translate("economy", "source: FinancialJuice picture of %1, OCR by Deepwater (validated)").arg(shownTime(published));
+    b->pricingNote.clear();
+    b->pricedDay = QDate();
+    return;
+  }
+  if (best.at.isValid()) {
+    const QList<MeetingDate> up = b->upcoming(1);
+    if (!up.isEmpty()) {
+      b->overnight = b->rate;
+      applyRates(*b, up, b->rate, {b->rate + best.bp / 100.0});
+      b->pricedAt = best.at.toLocalTime();
+      b->history.clear(); b->impliedBpWeekAgo = NAN;
+      b->historySource.clear();
+      b->pricingSourceEn = best.en;
+      b->pricingSource = best.shown;
+      b->pricingNote = QCoreApplication::translate("economy", "No FinancialJuice picture less than 36 hours old.");
+      b->pricedDay = QDate();
+      return;
+    }
+  }
+  if (!pic.isEmpty() && !usable(pic)) {
+    b->priced = false; b->path.clear();
+    b->pricingNote = QCoreApplication::translate("economy", "The last FinancialJuice table (%1) is older than the last decision.").arg(shownTime(when(pic)));
+  }
 }
 
 void CentralBanks::loadFjPricing() {
+  if (!m_fjWatching) {
+    m_fjWatching = true;
+    connect(&wire::Wire::instance(), &wire::Wire::itemsAdded, this, [this](const QList<wire::Item>& fresh) {
+      for (const auto& it : fresh)
+        if (isPicture(it) || isWeekly(it)) { QTimer::singleShot(20000, this, [this] { loadFjPricing(); }); return; }   // its page first
+    });
+  }
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  const auto items = wire::Wire::instance().between(now.addDays(-10), now.addSecs(60));
+  const auto have = [](const QString& id) { bool ok = true; return when(tables(&ok).value(id).toObject()).isValid(); };
   for (const QString id : {"RBA", "RBNZ"}) {
     applyFjTable(id);
+    QList<wire::Item> mine;
+    for (const auto& it : items)
+      if (isPicture(it) && pictureBank(it) == id && it.time > now.addDays(-7)) mine << it;
+    std::sort(mine.begin(), mine.end(), [](const wire::Item& a, const wire::Item& b) { return a.time > b.time; });
     Bank* b = mut(id);
-    if (!b->priced)
-      b->pricingNote = QCoreApplication::translate("economy", "Waiting for a FinancialJuice \"%1 Interest Rate Probabilities\" picture: none on the wire "
-                       "in the last 7 days (ASX and the RBA/RBNZ sites forbid programs).").arg(b->code);
+    if (!b->priced && !have(id)) {
+      if (mine.isEmpty())
+        b->pricingNote = QCoreApplication::translate("economy", "No FinancialJuice \"%1 Interest Rate Probabilities\" picture on the wire in the last 7 days "
+                         "(ASX and the RBA/RBNZ sites forbid programs).").arg(b->shownCode());
+      else if (!m_pictures.contains(mine.first().id))
+        b->pricingNote = QCoreApplication::translate("economy", "Reading the FinancialJuice picture of %1…").arg(shownTime(mine.first().time));
+    }
+    readPictures(id, mine);
   }
   changed();
-  const auto items = wire::Wire::instance().between(QDateTime::currentDateTimeUtc().addDays(-7), QDateTime::currentDateTimeUtc().addSecs(60));
-  QRegularExpression rx("^(RBA|RBNZ)\\b.*Interest Rate Probabilit", QRegularExpression::CaseInsensitiveOption);
-  for (const auto& it : items) {
-    if (it.source != "FinancialJuice" || m_fjSeen.contains(it.id)) continue;
-    const auto m = rx.match(it.text);
-    if (!m.hasMatch() || it.url.isEmpty()) continue;
-    m_fjSeen.insert(it.id);
-    const QString id = m.captured(1).toUpper();
-    const QDate published = it.time.date();
-    net::Request a; a.ttlSec = 30 * 24 * 3600; a.url = QUrl(it.url);
-    net::get(a, this, [this, id, published, url = it.url](const net::Reply& ar) {
-      if (!ar.ok()) return;
+  // the six other banks' pictures, behind everything else and one at a time: their host also carries the wire
+  if (!m_pictureTimer.isActive()) {
+    for (const QString id : {"FED", "ECB", "BOE", "BOJ", "BOC", "SNB"}) if (!m_pictureQueue.contains(id)) m_pictureQueue << id;
+    m_pictureTimer.start(60 * 1000);
+  }
+  // the weekly article (all eight banks), one reading per article
+  const wire::Item* week = nullptr;
+  for (const auto& it : items) if (isWeekly(it) && (!week || it.time > week->time)) week = &it;
+  if (week) loadWeeklyArticle(week->url, week->time);
+  loadTradingEconomics();
+}
+
+void CentralBanks::nextPicture() {
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  const auto items = wire::Wire::instance().between(now.addDays(-4), now.addSecs(60));
+  while (!m_pictureQueue.isEmpty()) {
+    const QString id = m_pictureQueue.takeFirst();
+    const wire::Item* newest = nullptr;
+    for (const auto& it : items) if (isPicture(it) && pictureBank(it) == id && (!newest || it.time > newest->time)) newest = &it;
+    if (!newest) continue;
+    if (const QDateTime have = pictureAt(id); have.isValid() && newest->time <= have) continue;
+    const PictureTry t = m_pictures.value(newest->id);
+    if (t.busy || t.done || (t.tries > 0 && QDateTime::currentMSecsSinceEpoch() - t.last < 20 * 60 * 1000)) continue;
+    readPictures(id, {*newest});
+    m_pictureTimer.start(4 * 60 * 1000);
+    return;
+  }
+}
+
+// The newest picture not yet read; an older one only while it is newer than the table in hand.
+void CentralBanks::readPictures(const QString& id, const QList<wire::Item>& items) {
+  bool ok = true;
+  const QDateTime have = when(tables(&ok).value(id).toObject());
+  const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+  for (int k = 0; k < items.size() && k < 4; ++k) {
+    const wire::Item& it = items[k];
+    if (have.isValid() && it.time <= have) return;
+    PictureTry& t = m_pictures[it.id];
+    if (t.busy) return;
+    if (t.done) continue;
+    if (t.tries > 0 && nowMs - t.last < 20 * 60 * 1000) continue;   // asked again in 20 min; meanwhile the one before it
+    t.busy = true; t.last = nowMs; ++t.tries;
+    readPicture(id, it.id, it.url, it.time, t.tries > 1, [this, id, items] { readPictures(id, items); });
+    return;
+  }
+}
+
+void CentralBanks::readPicture(const QString& id, const QString& item, const QString& url, const QDateTime& published, bool again,
+                               std::function<void()> next) {
+  const auto failed = [this, id, item, published, next](const QString& why, bool final) {
+    PictureTry& t = m_pictures[item];
+    t.busy = false;
+    if (final || t.tries >= 4) t.done = true;
+    qWarning().noquote() << "[macro]" << id << "picture of" << published.toString(Qt::ISODate) << "not read:" << why;
+    Bank* b = mut(id);
+    if (!b->priced) b->pricingNote = QCoreApplication::translate("economy", "Latest FinancialJuice picture (%1) rejected: %2.").arg(shownTime(published), why);
+    changed();
+    next();
+  };
+  const auto keep = [this, id, item, url, published, failed](const ratetables::Table& t) {
+    Bank* b = mut(id);
+    const bool off = t.ok() && std::isfinite(b->rate) && std::fabs(t.effective - b->rate) > 0.35;
+    if (!t.ok() || off) {
+      using F = ratetables::Fault;
+      const QString why = off || t.fault == F::Inconsistent ? QCoreApplication::translate("economy", "the recognised table did not validate (moves do not add up to the totals or rates are inconsistent)")
+                        : t.fault == F::OtherBank           ? QCoreApplication::translate("economy", "the picture is another bank's table")
+                                                            : QCoreApplication::translate("economy", "the picture is not a table");
+      failed(why, false);
+      return;
+    }
+    PictureTry& tr = m_pictures[item];
+    tr.busy = false; tr.done = true;
+    bool readOk = true;
+    QJsonObject all = tables(&readOk);
+    if (!readOk) return;   // the file can't be read: never overwrite it
+    const QJsonObject prev = all.value(id).toObject();
+    if (when(prev).isValid() && when(prev) >= published) return;   // keep the newest valid table
+    QJsonArray rows;
+    for (const auto& r : t.rows)
+      rows.append(QJsonObject{{"month", r.month.toString("yyyy-MM")}, {"implied", r.implied}, {"move", r.move}, {"total", r.total}});
+    QJsonArray older = prev.value("older").toArray();
+    if (when(prev).isValid()) {
+      QJsonObject p = prev; p.remove("older"); p.remove("url");
+      if (!older.isEmpty() && when(older.last().toObject()).date() == when(p).date()) older.removeLast();   // one a day
+      older.append(p);
+    }
+    while (older.size() > 45) older.removeFirst();
+    all.insert(id, QJsonObject{{"published", published.toUTC().toString(Qt::ISODate)}, {"url", url}, {"effective", t.effective},
+                               {"rows", rows}, {"older", older}});
+    detail::writeJson(tablesFile(), QJsonDocument(all));
+    if (id == "RBA" || id == "RBNZ") applyFjTable(id);
+    else {   // how it shares a 3-month contract between two meetings: the odds are computed again, from the cache
+      static const QHash<QString, QString> part{{"ECB", "ecbpricing"}, {"BOC", "bocpricing"}, {"BOJ", "bojpricing"}, {"SNB", "snbpricing"}};
+      if (part.contains(id)) { m_started.remove(part.value(id)); ensureLoaded(); }
+    }
+    changed();
+  };
+  const auto recognise = [this, id, keep](const QByteArray& picture) {
+    runAsync<ratetables::Table>(this, [picture, id]() { return ratetables::readPicture(ocr::recognize(picture), id, NAN); },
+                                [keep](ratetables::Table t) { keep(t); });
+  };
+  const auto viaPage = [this, url, again, failed, recognise] {
+    net::Request a; a.ttlSec = again ? 600 : 30 * 24 * 3600; a.url = QUrl(url);
+    net::get(a, this, [this, failed, recognise](const net::Reply& ar) {
+      if (!ar.ok()) { failed(QCoreApplication::translate("economy", "its page did not answer"), false); return; }
       const QString html = QString::fromUtf8(ar.body);
       auto mi = QRegularExpression("property=\"og:image\"\\s+content=\"([^\"]+)\"").match(html);
       if (!mi.hasMatch()) mi = QRegularExpression("content=\"([^\"]+)\"\\s+property=\"og:image\"").match(html);
-      if (!mi.hasMatch()) return;
+      if (!mi.hasMatch()) { failed(QCoreApplication::translate("economy", "its page shows no picture yet"), false); return; }
       net::Request im; im.ttlSec = 30 * 24 * 3600; im.url = QUrl(mi.captured(1));
-      net::get(im, this, [this, id, published, url](const net::Reply& ir) {
-        if (!ir.ok()) return;
-        const double policy = mut(id)->rate;
-        runAsync<FjTable>(this, [img = ir.body, id, published, policy]() {
-          return parseFj(ocr::recognize(img), id, published, policy);
-        }, [this, id, url](FjTable t) {
-          Bank* b = mut(id);
-          if (t.rows.isEmpty()) {
-            if (!b->priced) b->pricingNote = QCoreApplication::translate("economy", "Latest FinancialJuice picture (%1) rejected: %2.").arg(t.date.toString("yyyy-MM-dd"), t.reason);
-            changed(); return;
-          }
-          const QString file = paths::data("macro") + "/fj-tables.json";
-          bool readOk = true;
-          QJsonObject all = detail::readJson(file, &readOk).object();
-          if (!readOk) return;   // the file can't be read: never overwrite it
-          const QString prev = all.value(id).toObject().value("published").toString();
-          if (prev > t.date.toString("yyyy-MM-dd")) return;   // keep the newest valid table
-          QJsonObject o; o.insert("published", t.date.toString("yyyy-MM-dd")); o.insert("url", url); o.insert("effective", t.effective);
-          QJsonArray rows;
-          for (const auto& r : t.rows) {
-            QJsonObject ro; ro.insert("meeting", r.meeting.toString("yyyy-MM-dd")); ro.insert("implied", r.implied);
-            ro.insert("move", r.move); ro.insert("total", r.total); rows.append(ro);
-          }
-          o.insert("rows", rows); all.insert(id, o);
-          detail::writeJson(file, QJsonDocument(all));
-          applyFjTable(id);
-          changed();
-        });
+      net::get(im, this, [failed, recognise](const net::Reply& ir) {
+        if (!ir.ok()) { failed(QCoreApplication::translate("economy", "the picture did not load"), false); return; }
+        recognise(ir.body);
       });
     });
-  }
+  };
+  // the address of the picture holds the item's number: one request, its page only when that fails (RBA and RBNZ, whose
+  // odds wait for it, keep the page, which always names the right picture)
+  static const QRegularExpression number("/News/(\\d+)/");
+  const auto num = number.match(url);
+  if (id == "RBA" || id == "RBNZ" || !num.hasMatch()) { viaPage(); return; }
+  net::Request d; d.ttlSec = 30 * 24 * 3600; d.background = true;
+  d.url = QUrl(QStringLiteral("https://www.financialjuice.com/images/%1.png").arg(num.captured(1)));
+  net::get(d, this, [viaPage, recognise](const net::Reply& r) {
+    if (r.ok() && (r.body.startsWith("\x89PNG") || r.body.startsWith("\xff\xd8"))) recognise(r.body);
+    else viaPage();
+  });
+}
+
+void CentralBanks::loadWeeklyArticle(const QString& url, const QDateTime& published) {
+  bool ok = true;
+  const QDateTime have = when(tables(&ok).value("weekly").toObject());
+  if (!ok || (have.isValid() && have >= published) || m_weeklyTried.value(url) >= 3) return;
+  ++m_weeklyTried[url];
+  net::Request r; r.ttlSec = 30 * 24 * 3600; r.timeoutMs = 30000; r.url = QUrl(url);
+  net::get(r, this, [this, published, url](const net::Reply& rep) {
+    const auto banks = rep.ok() ? ratetables::readWeekly(rep.body) : QHash<QString, ratetables::Weekly>{};
+    if (banks.isEmpty()) { qWarning().noquote() << "[macro] weekly rate expectations not read:" << (rep.ok() ? QStringLiteral("no figures in the article") : rep.error); return; }
+    bool readOk = true;
+    QJsonObject all = tables(&readOk);
+    if (!readOk) return;
+    QJsonObject o;
+    for (auto it = banks.cbegin(); it != banks.cend(); ++it)
+      o.insert(it.key(), QJsonObject{{"nextBp", it->nextBp}, {"chance", it->chance}, {"what", it->what}, {"yearEndBp", it->yearEndBp},
+                                     {"nextYearBp", std::isfinite(it->nextYearBp) ? QJsonValue(it->nextYearBp) : QJsonValue()}});
+    all.insert("weekly", QJsonObject{{"published", published.toUTC().toString(Qt::ISODate)}, {"url", url}, {"banks", o}});
+    detail::writeJson(tablesFile(), QJsonDocument(all));
+    for (const QString id : {"RBA", "RBNZ"}) applyFjTable(id);
+    changed();
+  });
+}
+
+void CentralBanks::loadTradingEconomics() {
+  if (sources::isDisabled("tradingeconomics") || m_teRefused == QDate::currentDate()) return;   // off by default
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  if (m_teAsked && now - m_teAsked < 2 * 3600 * 1000) return;
+  m_teAsked = now;
+  net::Request r; r.ttlSec = 2 * 3600; r.timeoutMs = 30000;
+  r.url = QUrl("https://tradingeconomics.com/australia/implied-rates");
+  net::get(r, this, [this](const net::Reply& rep) {
+    if (!rep.ok()) {
+      if (rep.status == 401 || rep.status == 403 || rep.status == 429) m_teRefused = QDate::currentDate();   // not asked again today
+      return;
+    }
+    const auto page = ratetables::readTradingEconomics(rep.body);
+    const double rate = mut("RBA")->rate, bp = ratetables::expectedBp(page.next, rate);
+    if (page.next.isEmpty() && page.banks.isEmpty()) { qWarning("[macro] Trading Economics: no table on the page"); return; }
+    bool readOk = true;
+    QJsonObject all = tables(&readOk);
+    if (!readOk) return;
+    QJsonObject banks;
+    for (auto it = page.banks.cbegin(); it != page.banks.cend(); ++it)
+      banks.insert(it.key(), QJsonObject{{"current", it->current}, {"rate", it->rate}, {"bp", it->bp}, {"meeting", it->meeting.toString(Qt::ISODate)}});
+    QJsonObject te{{"published", rep.fetched.toUTC().toString(Qt::ISODate)}, {"banks", banks}};
+    if (std::isfinite(bp)) te.insert("bp", bp);
+    all.insert("TE", te);
+    detail::writeJson(tablesFile(), QJsonDocument(all));
+    applyFjTable("RBA");
+    changed();
+  });
 }
 }

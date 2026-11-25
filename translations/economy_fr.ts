@@ -2499,5 +2499,113 @@
         <source>Open %1</source>
         <translation>Ouvrir %1</translation>
     </message>
+    <message>
+        <source>%1 (calendar)</source>
+        <translation>%1 (calendrier)</translation>
+    </message>
+    <message>
+        <source>Consumer prices, year-on-year change, as the statistics office publishes it (BLS, Eurostat, ONS, Statistics Bureau of Japan, BFS, Statistics Canada, ABS); elsewhere and for the older history, the BIS long series.</source>
+        <translation>Prix à la consommation, variation sur un an, tels que publiés par l&apos;office statistique (BLS, Eurostat, ONS, Bureau des statistiques du Japon, OFS, Statistique Canada, ABS) ; ailleurs et pour l&apos;historique ancien, la série longue de la BRI.</translation>
+    </message>
+    <message>
+        <source>Unemployment rate, % of labour force, seasonally adjusted, as the statistics office publishes it (BLS, ONS, SECO, Statistics Canada, ABS); elsewhere the OECD&apos;s series (quarterly for New Zealand).</source>
+        <translation>Taux de chômage, % de la population active, corrigé des variations saisonnières, tel que publié par l&apos;office statistique (BLS, ONS, SECO, Statistique Canada, ABS) ; ailleurs la série de l&apos;OCDE (trimestrielle pour la Nouvelle-Zélande).</translation>
+    </message>
+    <message>
+        <source>Core consumer prices, year-on-year, in each country&apos;s own definition: BLS less food and energy, Eurostat less energy and food, ONS less energy, food, alcohol and tobacco, Japan less fresh food, BoC CPI-XFET, BFS core inflation 1 via the SNB, ABS trimmed mean; elsewhere the OECD&apos;s (less food and energy).</source>
+        <translation>Inflation sous-jacente sur un an, selon la définition de chaque pays : BLS hors alimentation et énergie, Eurostat hors énergie et alimentation, ONS hors énergie, alimentation, alcool et tabac, Japon hors produits frais, CPI-XFET de la BoC, inflation sous-jacente 1 de l&apos;OFS via la BNS, moyenne tronquée de l&apos;ABS ; ailleurs celle de l&apos;OCDE (hors alimentation et énergie).</translation>
+    </message>
+    <message>
+        <source>Retail trade volume, seasonally adjusted, change over 12 months, computed by Deepwater from the OECD index (quarterly where no monthly series exists). Australia: ABS household spending at current prices, which replaced retail trade in 2025.</source>
+        <translation>Volume du commerce de détail, corrigé des variations saisonnières, variation sur 12 mois calculée par Deepwater sur l&apos;indice de l&apos;OCDE (trimestriel là où il n&apos;existe pas de série mensuelle). Australie : dépenses des ménages de l&apos;ABS à prix courants, qui ont remplacé le commerce de détail en 2025.</translation>
+    </message>
+    <message>
+        <source>source: Trading Economics, page read on %1 (next meeting only)</source>
+        <translation>source : Trading Economics, page lue le %1 (prochaine réunion seulement)</translation>
+    </message>
+    <message>
+        <source>source: investingLive, weekly article of %1 (next meeting only)</source>
+        <translation>source : investingLive, article hebdomadaire du %1 (prochaine réunion seulement)</translation>
+    </message>
+    <message>
+        <source>No FinancialJuice picture less than 36 hours old.</source>
+        <translation>Aucune image FinancialJuice de moins de 36 heures.</translation>
+    </message>
+    <message>
+        <source>The last FinancialJuice table (%1) is older than the last decision.</source>
+        <translation>Le dernier tableau FinancialJuice (%1) date d&apos;avant la dernière décision.</translation>
+    </message>
+    <message>
+        <source>No FinancialJuice &quot;%1 Interest Rate Probabilities&quot; picture on the wire in the last 7 days (ASX and the RBA/RBNZ sites forbid programs).</source>
+        <translation>Aucune image FinancialJuice « %1 Interest Rate Probabilities » dans le fil depuis 7 jours (l&apos;ASX et les sites de la RBA et de la RBNZ interdisent les programmes).</translation>
+    </message>
+    <message>
+        <source>Reading the FinancialJuice picture of %1…</source>
+        <translation>Lecture de l&apos;image FinancialJuice du %1…</translation>
+    </message>
+    <message>
+        <source>its page did not answer</source>
+        <translation>sa page n&apos;a pas répondu</translation>
+    </message>
+    <message>
+        <source>its page shows no picture yet</source>
+        <translation>sa page ne montre pas encore d&apos;image</translation>
+    </message>
+    <message>
+        <source>the picture did not load</source>
+        <translation>l&apos;image ne s&apos;est pas chargée</translation>
+    </message>
+    <message>
+        <source>the picture is another bank&apos;s table</source>
+        <translation>l&apos;image est le tableau d&apos;une autre banque</translation>
+    </message>
+    <message>
+        <source>the picture is not a table</source>
+        <translation>l&apos;image n&apos;est pas un tableau</translation>
+    </message>
+    <message>
+        <source>Release calendar, decision of the day (%1)</source>
+        <translation>Calendrier économique, décision du jour (%1)</translation>
+    </message>
+    <message>
+        <source>Two meetings fall inside one 3-month contract: its move is shared between them as in FinancialJuice&apos;s table of %1.</source>
+        <translation>Deux réunions tombent dans un même contrat à 3 mois : son mouvement est réparti entre elles comme dans la table FinancialJuice du %1.</translation>
+    </message>
+    <message>
+        <source>Reading what the market prices…</source>
+        <translation>Lecture de ce que le marché prévoit…</translation>
+    </message>
+    <message>
+        <source>Fed</source>
+        <translation>Fed</translation>
+    </message>
+    <message>
+        <source>ECB</source>
+        <translation>BCE</translation>
+    </message>
+    <message>
+        <source>BoE</source>
+        <translation>BoE</translation>
+    </message>
+    <message>
+        <source>BoJ</source>
+        <translation>BoJ</translation>
+    </message>
+    <message>
+        <source>SNB</source>
+        <translation>BNS</translation>
+    </message>
+    <message>
+        <source>RBA</source>
+        <translation>RBA</translation>
+    </message>
+    <message>
+        <source>RBNZ</source>
+        <translation>RBNZ</translation>
+    </message>
+    <message>
+        <source>BoC</source>
+        <translation>BdC</translation>
+    </message>
 </context>
 </TS>

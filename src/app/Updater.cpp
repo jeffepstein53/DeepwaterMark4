@@ -3,6 +3,7 @@
 #include "net/Http.h"
 #include "net/Sources.h"
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -36,6 +37,17 @@ const sources::Registrar regGithub({"github-releases", "GitHub (Deepwater Mark 4
 const sources::Registrar regNtfy({"ntfy", "ntfy.sh", {"ntfy.sh"}, sources::Access::Keyless, 1000,
     "A message when a new Deepwater version is published (one WebSocket, no polling)",
     "Public notification service; the topic carries only the new version's tag", {}});
+
+// The fingerprint GitHub gives for the file ("sha256:" and 64 hexadecimal digits); anything else is none.
+QByteArray fingerprint(const QString& digest) {
+  static const QRegularExpression rx(QStringLiteral("^sha256:([0-9a-f]{64})$"), QRegularExpression::CaseInsensitiveOption);
+  return rx.match(digest).captured(1).toLower().toLatin1();
+}
+QByteArray fileFingerprint(const QString& file) {
+  QFile f(file);
+  QCryptographicHash h(QCryptographicHash::Sha256);
+  return f.open(QIODevice::ReadOnly) && h.addData(&f) ? h.result().toHex() : QByteArray();
+}
 
 QString shellQuote(const QString& s) { QString q = s; q.replace("'", "'\\''"); return "'" + q + "'"; }
 }
@@ -162,6 +174,7 @@ void Updater::onReleases(const QByteArray& json) {
       best.asset = QUrl(ao.value("browser_download_url").toString());
       best.assetName = name;
       best.size = qint64(ao.value("size").toDouble());
+      best.sha256 = fingerprint(ao.value("digest").toString());
       break;
     }
   }
@@ -213,7 +226,11 @@ void Updater::install() {
 void Updater::download() {
   const QString dir = paths::cache("updates");
   const QString file = dir + "/" + m_latest.assetName;
-  if (QFileInfo(file).size() == m_latest.size && m_latest.size > 0) { installFile(file); return; }   // already here
+  if (m_latest.sha256.isEmpty()) {   // nothing to compare the file with: nothing is installed
+    setState(State::Available, QCoreApplication::translate("update", "GitHub gives no fingerprint for this file: it is not installed."));
+    return;
+  }
+  if (QFileInfo(file).size() == m_latest.size && m_latest.size > 0 && fileFingerprint(file) == m_latest.sha256) { installFile(file); return; }   // already here
   if (sources::isHostDisabled(m_latest.asset.host())) {
     setState(State::Available, QCoreApplication::translate("update", "The GitHub source is switched off in the Sources tab."));
     return;
@@ -255,6 +272,11 @@ void Updater::download() {
     if (!err.isEmpty() || (m_latest.size > 0 && got != m_latest.size)) {
       QFile::remove(part);
       setState(State::Available, err.isEmpty() ? QCoreApplication::translate("update", "The download was incomplete; try again.") : err);
+      return;
+    }
+    if (fileFingerprint(part) != m_latest.sha256) {
+      QFile::remove(part);
+      setState(State::Available, QCoreApplication::translate("update", "The downloaded file is not the one GitHub describes (its fingerprint differs): it has been deleted."));
       return;
     }
     QFile::remove(file);
@@ -374,7 +396,8 @@ void Updater::installWindows(const QString& installer) {
   // The installer replaces files Deepwater is running from, so it starts once this process has quit. It runs
   // silently and per user (no administrator's consent) into the folder this program runs from, then Deepwater starts
   // again from there. /D= comes last and is read to the end of the line: no quotes around the path. A test profile
-  // (DW_PROFILE) passes /NOREG: the installer then leaves the registry and the Start menu alone.
+  // (DW_PROFILE) passes /NOREG: the installer then leaves the registry and the Start menu alone. The fingerprint is
+  // compared once more just before it runs.
   auto psQuote = [](QString s) { s.replace("'", "''"); return "'" + s + "'"; };
   const QString dir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
   const QString app = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
@@ -382,11 +405,12 @@ void Updater::installWindows(const QString& installer) {
   if (qEnvironmentVariableIsSet("DW_PROFILE")) args << "'/NOREG'";
   args << psQuote("/D=" + dir);
   const QString script = QString("Wait-Process -Id %1 -ErrorAction SilentlyContinue; "
+                                 "if ((Get-FileHash -LiteralPath %2 -Algorithm SHA256).Hash -eq '%5') { "
                                  "$p = Start-Process -FilePath %2 -ArgumentList %3 -Wait -PassThru; "
-                                 "if ($p -and $p.ExitCode -eq 0) { Remove-Item -LiteralPath %2 -ErrorAction SilentlyContinue }; "
+                                 "if ($p -and $p.ExitCode -eq 0) { Remove-Item -LiteralPath %2 -ErrorAction SilentlyContinue } }; "
                                  "Start-Process -FilePath %4")
                              .arg(QCoreApplication::applicationPid())
-                             .arg(psQuote(QDir::toNativeSeparators(installer)), args.join(","), psQuote(app));
+                             .arg(psQuote(QDir::toNativeSeparators(installer)), args.join(","), psQuote(app), QString::fromLatin1(m_latest.sha256));
   if (!QProcess::startDetached("powershell.exe", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", script})) {
     setState(State::Available, QCoreApplication::translate("update", "The installer could not be started; run %1 yourself.").arg(installer));
     return;

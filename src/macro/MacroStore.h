@@ -22,6 +22,9 @@
 // Data sets: BIS CBPOL (policy rates, monthly + daily) and WS_LONG_CPI (CPI y/y, monthly), OECD QNA (GDP q/q,
 // y/y), OECD LFS (unemployment, monthly), OECD MEI/CLI (business and consumer confidence), OECD FINMARK
 // (10-year and 3-month rates, monthly), World Bank WDI (annual long-run figures). No forecasts, no estimates.
+// Over them, for the eight currencies: the statistics offices' own series (BLS, ONS, ABS, Statistics Canada, Statistics
+// Bureau of Japan, BFS and SECO via the SNB, Eurostat; macro/National.h) and, until a series has its new period, the
+// release calendar's figure.
 namespace macro {
 
 enum class Ind {
@@ -63,6 +66,18 @@ struct Series {
   bool ok() const { return !pts.isEmpty(); }
   Point last() const { return pts.isEmpty() ? Point{} : pts.last(); }
   Point prior() const { return pts.size() < 2 ? Point{} : pts[pts.size() - 2]; }
+};
+
+// A published figure of the release calendar, shown until the series has its period (macro/National.h).
+struct CalendarFigure {
+  QString iso2;
+  Ind ind = Ind::Inflation;
+  QDate period;          // first day of the month or quarter it measures
+  char freq = 'M';
+  double value = NAN;    // percent
+  QString source;        // "Myfxbook", "FinancialJuice", "ONS" …
+  QDateTime published;   // UTC
+  bool valid() const { return std::isfinite(value) && period.isValid(); }
 };
 
 struct Latest {
@@ -119,12 +134,17 @@ public:
   bool isDeep() const { return m_deep; }
   void ensureLoaded();                         // starts every data set once; later calls refresh stale ones
   bool loading() const { return m_pending + m_parsing > 0; }
+  bool nationalLoading(const QString& iso2) const { return m_nationalPending.value(iso2.toLower()) > 0; }
   int datasetsLoaded() const { return m_loaded.size(); }
 
   Series series(const QString& iso2, Ind i) const;
   // As published, without the central-bank feed's latest value that series() adds to PolicyRate (Facts: the BIS chain
   // must hold BIS figures only; the feed has its own chain).
   Series rawSeries(const QString& iso2, Ind i) const { return m_data.value(iso2.toLower()).value(int(i)); }
+  // The other compilations of the same indicator, as published (BIS, OECD, ECB…), for the eight currencies' economies: the
+  // second reading of the figure shown (macro/KeyFigures.h).
+  QList<Series> otherReadings(const QString& iso2, Ind i) const { return m_readings.value(iso2.toLower()).value(int(i)).values(); }
+  Point bisDaily(const QString& iso2) const { return m_bisDaily.value(iso2.toLower()); }
   Latest latest(const QString& iso2, Ind i) const;
   PolicyRate policyRate(const QString& iso2) const;   // central-bank feed (CentralBanks) else BIS else invalid
   CurrencyMacro forCurrency(const QString& ccy) const;   // USD EUR GBP JPY CHF CAD AUD NZD (+ others with data)
@@ -147,10 +167,19 @@ private:
   void loadWorldBank(Ind i, const QString& code);
   void loadCoreAndRetail();          // CoreInflation + RetailSalesYoy (OECD, ECB, Eurostat, BoC, SNB, e-Stat)
   void putIfFresher(const QString& iso2, const Series& s);   // replaces a series only if the new one ends later
+  void loadNational(const QString& iso2 = {});   // the statistics offices' own series (macro/National.h); one country or all
+  void applyNational();                          // lays them over m_data (again after each data set that replaces it)
+  void readCalendar();                           // the release calendar's latest figures (last two weeks)
   void merge(const QHash<QString, QHash<int, Series>>& add, const QString& datasetKey);
   void failed(const QString& datasetKey);      // the request failed: retried by ensureLoaded() after 5 minutes
 
   QHash<QString, QHash<int, Series>> m_data;   // iso2 → indicator → series
+  QHash<QString, QHash<int, Series>> m_national;   // same keys: the statistics offices' series
+  void remember(const QString& iso2, const Series& s);
+  QHash<QString, QHash<int, QHash<QString, Series>>> m_readings;   // iso2 → indicator → publisher → its series
+  QHash<QString, QHash<int, CalendarFigure>> m_calendar;   // same keys: the release calendar's figures
+  QHash<QString, int> m_nationalPending;       // iso2 → requests under way
+  bool m_calendarWatched = false;
   QHash<QString, Point> m_bisDaily;            // iso2 → latest daily BIS policy rate
   QDateTime m_bisDailyFetched;
   QSet<QString> m_loaded;

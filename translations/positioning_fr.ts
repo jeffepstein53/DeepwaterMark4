@@ -1388,5 +1388,9 @@ Aucun relevé pour l'instant.</translation>
         <source>CFTC: one report could not be loaded (%1) — some panels are empty</source>
         <translation>CFTC : un rapport n’a pas pu être chargé (%1) — certains panneaux sont vides</translation>
     </message>
+    <message>
+        <source>Windows could not encrypt the Myfxbook session: it is not kept.</source>
+        <translation>Windows n&apos;a pas pu chiffrer la session Myfxbook : elle n&apos;est pas conservée.</translation>
+    </message>
 </context>
 </TS>

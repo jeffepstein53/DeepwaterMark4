@@ -1,5 +1,6 @@
 #include "pages/market/fundamental/FundWidgets.h"
 #include "pages/market/fundamental/FundStyle.h"
+#include "macro/KeyFigures.h"
 #include "ui/Theme.h"
 #include "ui/Kit.h"
 #include "ui/Chart.h"
@@ -618,7 +619,17 @@ void ReadCard::paintEvent(QPaintEvent*) {
 }
 
 // ================================================================ ComparatorCard
-ComparatorCard::ComparatorCard(QWidget* parent) : QWidget(parent) { setMouseTracking(true); }
+ComparatorCard::ComparatorCard(QWidget* parent) : QWidget(parent) {
+  setMouseTracking(true);
+  macro::KeyFigures::instance().start();
+  connect(&macro::KeyFigures::instance(), &macro::KeyFigures::changed, this, [this] { update(); });
+}
+namespace {   // the comparator's rows that macro/KeyFigures follows
+QString checkedFigure(int row) {
+  static const char* const f[] = {"Policy rate", "CPI y/y", "Core CPI y/y", "GDP q/q", "Unemployment"};
+  return row >= 0 && row < 5 ? QString::fromLatin1(f[row]) : QString();
+}
+}
 QStringList ComparatorCard::others() const {
   QStringList o;
   static const QStringList order{"AUD", "EUR", "USD", "NZD", "GBP", "CHF", "JPY", "CAD"};
@@ -673,23 +684,32 @@ void ComparatorCard::paintEvent(QPaintEvent*) {
   }
   for (int i = 0; i < cmp.rows.size(); ++i) {
     const auto& r = cmp.rows[i];
-    const double y = 86 + i * 31;
+    const double y = kRowsTop + i * kPitch;
     p.setFont(prose(14)); p.setPen(theme::map("#c9c6c1"));
     p.drawText(QRectF(10, y, xa - 90 - 10, 24), Qt::AlignLeft | Qt::AlignVCenter,
                QFontMetrics(p.font()).elidedText(r.label, Qt::ElideRight, int(xa - 100)));
-    auto val = [&](double v) { return std::isfinite(v) ? QString::number(v, 'f', r.decimals) + r.unit : dash(); };
+    auto val = [&](double v) { return std::isfinite(v) ? num(v, r.decimals) + r.unit : dash(); };
+    // another source gives another figure: amber, with ≠ (both values in the tooltip)
+    const QString fig = checkedFigure(i);
+    const bool da = std::isfinite(r.a) && !fig.isEmpty() && macro::checkDiffers(m_base, fig);
+    const bool db = std::isfinite(r.b) && !fig.isEmpty() && macro::checkDiffers(m_other, fig);
     p.setFont(mono(13));
-    p.setPen(r.better > 0 ? c.better : (std::isfinite(r.a) ? theme::map("#e8e5e0") : c.sub));
-    p.drawText(QRectF(xa - 90, y, 90, 24), Qt::AlignRight | Qt::AlignVCenter, val(r.a));
-    p.setPen(r.better < 0 ? c.better : (std::isfinite(r.b) ? theme::map("#e8e5e0") : c.sub));
-    p.drawText(QRectF(xb - 90, y, 90, 24), Qt::AlignRight | Qt::AlignVCenter, val(r.b));
+    p.setPen(da ? theme::pal().accent : r.better > 0 ? c.better : (std::isfinite(r.a) ? theme::map("#e8e5e0") : c.sub));
+    p.drawText(QRectF(xa - 90, y, 90, 24), Qt::AlignRight | Qt::AlignVCenter, (da ? QStringLiteral("≠ ") : QString()) + val(r.a));
+    p.setPen(db ? theme::pal().accent : r.better < 0 ? c.better : (std::isfinite(r.b) ? theme::map("#e8e5e0") : c.sub));
+    p.drawText(QRectF(xb - 90, y, 90, 24), Qt::AlignRight | Qt::AlignVCenter, (db ? QStringLiteral("≠ ") : QString()) + val(r.b));
     p.setFont(mono(12)); p.setPen(c.sub);
     const QString d = std::isfinite(r.a) && std::isfinite(r.b) ? QString("%1%2").arg(r.a - r.b >= 0 ? "+" : "").arg(r.a - r.b, 0, 'f', 2) : dash();
     p.drawText(QRectF(xd - 70, y, 70, 24), Qt::AlignRight | Qt::AlignVCenter, d);
     p.fillRect(QRectF(10, y + 28, width() - 20, 1), c.rowRule);
   }
+  if (!cmp.carry.isEmpty()) {
+    p.setFont(mono(11)); p.setPen(theme::map("#c9c6c1"));
+    p.drawText(QRectF(10, kRowsTop + cmp.rows.size() * kPitch, width() - 20, 20), Qt::AlignLeft | Qt::AlignVCenter,
+               QFontMetrics(p.font()).elidedText(cmp.carry, Qt::ElideRight, width() - 20));
+  }
   // verdict
-  const QRectF v(10, 314, width() - 20, 90);
+  const QRectF v(10, 314 + kCarryH, width() - 20, 90);
   p.setRenderHint(QPainter::Antialiasing);
   p.setPen(QPen(c.verdictBorder, 1)); p.setBrush(c.verdictBg); p.drawRoundedRect(v.adjusted(0.5, 0.5, -0.5, -0.5), 2, 2);
   p.setRenderHint(QPainter::Antialiasing, false);
@@ -715,12 +735,15 @@ void ComparatorCard::paintEvent(QPaintEvent*) {
 bool ComparatorCard::event(QEvent* e) {
   if (e->type() == QEvent::ToolTip) {
     auto* he = static_cast<QHelpEvent*>(e);
-    const int i = int((he->pos().y() - 86) / 31);
+    const int i = int((he->pos().y() - kRowsTop) / kPitch);
     QString tip;
-    if (he->pos().y() >= 86 && i >= 0 && i < 7) {
+    if (he->pos().y() >= kRowsTop && i >= 0 && i < kComparedRows + kRealRows) {
       const Inputs *a = nullptr, *b = nullptr;
       for (const auto& in : m_all) { if (in.ccy == m_base) a = &in; if (in.ccy == m_other) b = &in; }
       if (a && b) tip = compare(*a, *b).rows.value(i).note;
+      if (const QString fig = checkedFigure(i); !fig.isEmpty())
+        for (const QString& ccy : {m_base, m_other})
+          if (const QString t = macro::checkTip(ccy, fig); !t.isEmpty()) tip += (tip.isEmpty() ? QString() : QStringLiteral("\n")) + ccy + ": " + QString(t).replace('\n', QStringLiteral("\n    "));
     }
     if (tip.isEmpty()) QToolTip::hideText(); else QToolTip::showText(he->globalPos(), tip, this);
     return true;
@@ -813,9 +836,11 @@ void HeatmapCard::paintEvent(QPaintEvent*) {
     }
   const auto cols = phone ? QVector<QPair<double, double>>() : columns();
   for (int c = 0; c < 8 && !phone; ++c) {
-    p.setFont(mono(10, c == 7 ? QFont::Bold : QFont::Normal, c == 7 ? 2 : 3));
+    const QFont f = fitFont(heads[c], 10, c == 7 ? 2 : 3, cols[c].second - (c == 0 ? 6 : 2), c == 7 ? QFont::Bold : QFont::Normal);
+    p.setFont(f);
     p.setPen(c == 7 ? k.biasHeader : k.dim);
-    p.drawText(QRectF(cols[c].first + (c == 0 ? 6 : 0), 45, cols[c].second, 16), (c == 0 ? Qt::AlignLeft : Qt::AlignHCenter) | Qt::AlignVCenter, heads[c]);
+    p.drawText(QRectF(cols[c].first + (c == 0 ? 6 : 0), 45, cols[c].second - (c == 0 ? 6 : 0), 16), (c == 0 ? Qt::AlignLeft : Qt::AlignHCenter) | Qt::AlignVCenter,
+               QFontMetricsF(f).elidedText(heads[c], Qt::ElideRight, cols[c].second));
   }
   p.setRenderHint(QPainter::Antialiasing);
   auto drawCell = [&](int r, int c, bool hover) {
@@ -847,13 +872,17 @@ void HeatmapCard::paintEvent(QPaintEvent*) {
     }
     p.setPen(QPen(border, 1)); p.setBrush(fill); p.drawRoundedRect(rc.adjusted(0.5, 0.5, -0.5, -0.5), 2, 2);
     if (c == 0) {
-      const double fx = phone ? 10 : 18;
-      p.drawPixmap(QPointF(rc.left() + fx, rc.center().y() - 7), ui::flag(s.ccy, QSize(20, 14)));
-      p.setFont(sans(15, QFont::Bold)); p.setPen(sel ? theme::map("#f0d070") : k.white);
-      p.drawText(QRectF(rc.left() + fx + 28, rc.top(), 60, rc.height()), Qt::AlignLeft | Qt::AlignVCenter, s.ccy);
-      p.setFont(mono(11)); p.setPen(k.scoreDim);
       const QString sc = m_ready && std::isfinite(s.score) ? QString("%1%2").arg(s.score > 0 ? "+" : "").arg(int(s.score)) : dash();
-      p.drawText(QRectF(rc.right() - 60, rc.top(), 50, rc.height()), Qt::AlignRight | Qt::AlignVCenter, sc);
+      const QFont cf = sans(15, QFont::Bold), vf = mono(11);
+      const double need = 28 + QFontMetricsF(cf).horizontalAdvance(s.ccy) + 8 + QFontMetricsF(vf).horizontalAdvance(sc) + 8;
+      const double fx = phone ? 10 : std::clamp(rc.width() - need, 6.0, 18.0);
+      const bool two = !phone && need + fx > rc.width();   // a narrow column: the score goes under the name
+      p.drawPixmap(QPointF(rc.left() + fx, rc.center().y() - 7), ui::flag(s.ccy, QSize(20, 14)));
+      p.setFont(cf); p.setPen(sel ? theme::map("#f0d070") : k.white);
+      p.drawText(QRectF(rc.left() + fx + 28, rc.top() + (two ? 8 : 0), 60, two ? 22 : rc.height()), Qt::AlignLeft | Qt::AlignVCenter, s.ccy);
+      p.setFont(vf); p.setPen(k.scoreDim);
+      if (two) p.drawText(QRectF(rc.left() + fx + 28, rc.top() + 30, rc.width() - fx - 30, 18), Qt::AlignLeft | Qt::AlignVCenter, sc);
+      else p.drawText(QRectF(rc.right() - 60, rc.top(), phone ? 50 : 52, rc.height()), Qt::AlignRight | Qt::AlignVCenter, sc);
     } else if (c == 7) {
       // words keep a margin inside the cell (6 px each side); still too wide at 9 px → elided, the tooltip has it all
       const QFont f = fitFont(w, 13, 2, rc.width() - 12);

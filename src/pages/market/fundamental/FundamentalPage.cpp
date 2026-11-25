@@ -121,13 +121,13 @@ public:
       const int half = (lw - 12) / 2;
       const int rh = read->heightFor(half);
       read->setGeometry(X + 14, y, half, rh);
-      comparator->setGeometry(X + 14 + half + 12, y, lw - half - 12, 412);
-      y += qMax(rh, 412) + 15;
+      comparator->setGeometry(X + 14 + half + 12, y, lw - half - 12, ComparatorCard::kHeight);
+      y += qMax(rh, ComparatorCard::kHeight) + 15;
     } else {
       const int rx = X + cw() - 14 - rightW();
       const int rh = read->heightFor(rightW());
       read->setGeometry(rx, 121, rightW(), rh);
-      comparator->setGeometry(rx, 121 + rh + 11, rightW(), 412);
+      comparator->setGeometry(rx, 121 + rh + 11, rightW(), ComparatorCard::kHeight);
     }
     heatmap->setGeometry(X + 14, y, lw, HeatmapCard::heightForRows(8));
     const int detailH = detailOpen ? 34 + int(detailRows().size()) * 24 + 8 : 0;
@@ -143,7 +143,7 @@ public:
     int y = 200 + d + PolicyCard::phoneHeight() + 15;
     const int rh = read->heightFor(lw);
     read->setGeometry(14, y, lw, rh); y += rh + 12;
-    comparator->setGeometry(14, y, lw, 412); y += 412 + 15;
+    comparator->setGeometry(14, y, lw, ComparatorCard::kHeight); y += ComparatorCard::kHeight + 15;
     heatmap->setGeometry(14, y, lw, HeatmapCard::phoneHeightForRows(8));
     const int detailH = detailOpen ? 34 + int(detailRows().size()) * detailRowH() + 8 : 0;
     const int h = int(detailButton().bottom()) + 8 + detailH + 6 + footerH() + 6 + methodH() + 24;

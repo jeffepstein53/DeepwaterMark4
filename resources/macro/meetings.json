@@ -63,11 +63,12 @@
     },
     "RBNZ": {
       "source": "https://www.rbnz.govt.nz/news-and-events/how-we-release-information/ocr-decision-dates-and-financial-stability-report-dates-to-feb-2028",
-      "note": "rbnz.govt.nz refuses programs (HTTP 403); dates entered by hand from the RBNZ schedule. Mar-Sep 2027 (8 decisions a year from 2027) NOT entered: not confirmed on rbnz.govt.nz (403 again on 2026-11-16). Secondary sources give 17 Mar (MPS), 5 May (MPR), 16 Jun (MPS) [squirrel.co.nz, 2026-10-29], 4 Aug, 15 Sep [financecalendar.com]; RBNZ event pages exist for Feb and May 2027. Check them on the official page (source) before adding.",
+      "note": "rbnz.govt.nz refuses programs (HTTP 403); dates entered by hand from the RBNZ schedule. 8 decisions a year from 2027: 17 Mar, 5 May and 16 Jun 2027 entered from a secondary source (squirrel.co.nz, 2026-10-29; the RBNZ's own event page gives 5 May, 2026-11-25) and marked unverified; 4 Aug and 15 Sep [financecalendar.com] not entered. Check them on the official page (source).",
       "meetings": [
         ["2026-02-18"], ["2026-04-08"], ["2026-05-27"], ["2026-07-08"], ["2026-09-02"], ["2026-10-28"], ["2026-12-09"],
-        ["2027-02-10"], ["2027-10-27"], ["2027-12-08"]
-      ]
+        ["2027-02-10"], ["2027-03-17"], ["2027-05-05"], ["2027-06-16"], ["2027-10-27"], ["2027-12-08"]
+      ],
+      "unverified": ["2027-03-17", "2027-05-05", "2027-06-16"]
     }
   },
   "heads": {

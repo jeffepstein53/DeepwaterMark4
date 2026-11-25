@@ -46,6 +46,9 @@ CalendarPage::CalendarPage(QWidget* parent) : QWidget(parent) {
   });
   connect(m_panel, &RangePanel::closeRequested, this, &CalendarPage::closePanel);
   connect(m_table, &CalendarTable::contentChanged, this, [this] { if (m_pageScroll) m_pageScroll->relayout(); });
+  connect(m_table, &CalendarTable::openAt, this, [this](int y) {   // after the relayout, when the bar knows its new range
+    QTimer::singleShot(0, this, [this, y] { if (m_pageScroll) m_pageScroll->verticalScrollBar()->setValue(m_table->y() + y); });
+  });
 
   QDate w = news::Calendar::currentWeek();
   const QByteArray hw = qgetenv("DW_CAL_WEEK");
@@ -58,6 +61,7 @@ void CalendarPage::loadWeek(const QDate& w) {
   m_filters->setWeek(w);
   m_all = news::Calendar::instance().events(w);
   m_table->setEmptyNote({});
+  if (w == news::Calendar::currentWeek()) m_table->openOnToday();
   refill();
   news::Calendar::instance().load(w);
 }

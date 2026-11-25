@@ -288,6 +288,7 @@ void DataCompareCard::paintBody(QPainter& p, const QRectF& b) {
   const qreal right = b.right() - 7;
   const qreal colW = b.width() < 340 ? 64 : 85;
   const QFont hf = theme::condensed(10, QFont::Bold), lf = theme::condensed(13, QFont::Medium), vf = theme::mono(12, QFont::Medium);
+  const QFont df = theme::condensed(10, QFont::Normal);
   p.setFont(hf); p.setPen(theme::map(QColor(0x76, 0x74, 0x65)));
   const qreal hy = b.top() + 13;
   p.drawText(QPointF(b.left() + 7, hy + 4), QCoreApplication::translate("watch", "INDICATOR"));
@@ -303,10 +304,18 @@ void DataCompareCard::paintBody(QPainter& p, const QRectF& b) {
     p.drawText(QRectF(b.left() + 7, y, lw, 26), Qt::AlignVCenter, QFontMetricsF(lf).elidedText(row.label, Qt::ElideRight, lw));
     p.setFont(vf);
     for (int c = 0; c < m_cols.size(); ++c) {
-      const QString v = row.values.value(c, fmt::dash());
-      p.setPen(v == fmt::dash() ? theme::map(QColor(0x55, 0x52, 0x4b)) : theme::map(QColor(0xed, 0xe8, 0xdf)));
+      const bool differs = row.differs.value(c);
+      const QString v = (differs ? QStringLiteral("≠ ") : QString()) + row.values.value(c, fmt::dash());
+      p.setPen(v == fmt::dash() ? theme::map(QColor(0x55, 0x52, 0x4b)) : differs ? theme::pal().accent : theme::map(QColor(0xed, 0xe8, 0xdf)));
       const qreal r = right - (m_cols.size() - 1 - c) * colW;
       p.drawText(QRectF(r - colW, y, colW, 26), Qt::AlignRight | Qt::AlignVCenter, v);
+      if (const QString d = row.dates.value(c); !d.isEmpty()) {   // the period, in small before the value
+        const qreal room = colW - QFontMetricsF(vf).horizontalAdvance(v) - 5;
+        p.setFont(df); p.setPen(theme::map(QColor(0x76, 0x74, 0x65)));
+        if (QFontMetricsF(df).horizontalAdvance(d) <= room + 4)
+          p.drawText(QRectF(r - colW - 4, y, room + 4, 26), Qt::AlignRight | Qt::AlignVCenter, d);
+        p.setFont(vf);
+      }
     }
     y += 25.7;
   }
@@ -378,7 +387,7 @@ void MeetingCard::paintHalf(QPainter& p, const QRectF& h, int side) {
     if (hf.state == NotConnected) {
       const QRectF r = h.adjusted(14, 40, -14, -10);
       p.setFont(theme::sans(12)); p.setPen(theme::map(QColor(0xb8, 0xb4, 0xac)));
-      p.drawText(QRectF(r.left(), r.center().y() - 30, r.width(), 18), Qt::AlignCenter, QCoreApplication::translate("watch", "Not connected"));
+      p.drawText(QRectF(r.left(), r.center().y() - 30, r.width(), 18), Qt::AlignCenter, QCoreApplication::translate("watch", "No market pricing"));
       p.setFont(theme::sans(10)); p.setPen(theme::map(QColor(0x5e, 0x5a, 0x53)));
       p.drawText(QRectF(r.left(), r.center().y() - 6, r.width(), r.height() / 2), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, hf.msg);
     } else centeredNote(p, plot, hf.msg);
