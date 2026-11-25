@@ -241,6 +241,7 @@ void HelpWindow::load() {
   m_chapters.clear();
   QStringList ids{"start"};
   for (const auto& t : app::tabs()) ids << t.id;
+  ids << "claude";   // the last chapter belongs to no tab: Options > Claude, what Claude can read (0.4.3)
   const QString lang = i18n::code();
   for (const QString& id : ids) {
     QFile f(QString(":/help/%1/%2.md").arg(lang, id));

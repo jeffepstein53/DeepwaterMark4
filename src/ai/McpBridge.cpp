@@ -1,7 +1,9 @@
 #include "ai/McpBridge.h"
 #include "ai/McpServer.h"
 #include "ai/ClaudeCode.h"
+#include "ai/ClaudeDesktopFiles.h"
 #include "core/Process.h"
+#include "core/Settings.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -30,12 +32,19 @@ void out(const QByteArray& line) {
   std::fputc('\n', stdout);
   std::fflush(stdout);
 }
-QByteArray rpcError(const QJsonValue& id, const QString& msg) {
-  return QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", id}, {"error", QJsonObject{{"code", -32000}, {"message", msg}}}})
+QByteArray rpcError(const QJsonValue& id, const QString& msg, int code = -32000) {
+  return QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", id}, {"error", QJsonObject{{"code", code}, {"message", msg}}}})
       .toJson(QJsonDocument::Compact);
 }
-const char* kClosed = "Deepwater is not open on this computer, or Claude's access is off (Options > Claude). "
-                      "Open Deepwater, then reconnect this MCP server (/mcp in Claude Code; restart Claude Desktop).";
+QByteArray rpcResult(const QJsonValue& id, const QJsonObject& result) {
+  return QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", id}, {"result", result}}).toJson(QJsonDocument::Compact);
+}
+// a tool call that could not reach the app: an answer Claude reads (isError), not a broken server
+QByteArray toolError(const QJsonValue& id, const QString& msg) {
+  return rpcResult(id, QJsonObject{{"content", QJsonArray{QJsonObject{{"type", "text"}, {"text", msg}}}}, {"isError", true}});
+}
+const char* kClosed = "Deepwater is not open on this computer, or Claude's access is off (Options > CLAUDE). "
+                      "Ask the user to open Deepwater with that switch on, then call the tool again: nothing to reconnect or restart.";
 
 // one HTTP POST to the app; false when it could not be reached
 bool post(const QByteArray& body, QByteArray* answer, int* status) {
@@ -88,15 +97,29 @@ int run(int argc, char** argv) {
     const QByteArray msg = QByteArray::fromStdString(line).trimmed();
     if (msg.isEmpty()) continue;
     const QJsonObject rq = QJsonDocument::fromJson(msg).object();
-    const bool request = rq.contains("id");
+    if (!rq.contains("id")) continue;   // notifications (initialized, cancelled…): nothing to answer, nothing to do
+    const QJsonValue id = rq.value("id");
+    const QString m = rq.value("method").toString();
+    // The handshake never depends on the app: a client that asked while Deepwater was closed took the error for a dead
+    // server, dropped its tools and never asked again, even once Deepwater was open (2026-11-25, Claude Desktop).
+    if (m == "initialize") {
+      out(rpcResult(id, McpServer::initializeResult(rq.value("params").toObject().value("protocolVersion").toString())));
+      continue;
+    }
+    if (m == "ping") { out(rpcResult(id, {})); continue; }
+    if (m == "tools/list") {
+      out(rpcResult(id, QJsonObject{{"tools", McpServer::toolList(settings::value("ai.mcp.journal", false).toBool())}}));
+      continue;
+    }
+    if (m != "tools/call") { out(rpcError(id, "method not found: " + m, -32601)); continue; }
     QByteArray answer; int status = 0;
     if (!post(msg, &answer, &status) || status == 404 || status == 401) {
       std::fprintf(stderr, "[deepwater] %s\n", kClosed);
-      if (request) out(rpcError(rq.value("id"), QString::fromUtf8(kClosed)));
+      out(toolError(id, QString::fromUtf8(kClosed)));
       continue;
     }
-    if (request && !answer.trimmed().isEmpty()) out(answer.trimmed());
-    else if (request) out(rpcError(rq.value("id"), QStringLiteral("Deepwater answered HTTP %1 without a body").arg(status)));
+    if (!answer.trimmed().isEmpty()) out(answer.trimmed());
+    else out(toolError(id, QStringLiteral("Deepwater answered HTTP %1 without a body").arg(status)));
   }
   return 0;
 }
@@ -147,60 +170,30 @@ void setInClaudeCode(bool on, std::function<void(bool, QString)> done) {
   });
 }
 
-QString claudeDesktopConfig() {
-#if defined(Q_OS_MACOS)
+QStringList claudeDesktopConfigs() {
+#if defined(Q_OS_WIN)
+  return claudedesktop::configFiles(qEnvironmentVariable("LOCALAPPDATA"), qEnvironmentVariable("APPDATA"));   // the two homes of the packaged app
+#elif defined(Q_OS_MACOS)
   const QString dir = QDir::homePath() + "/Library/Application Support/Claude";
   if (!QFileInfo::exists(dir) && !QFileInfo::exists("/Applications/Claude.app")) return {};
-#elif defined(Q_OS_WIN)
-  QString dir;
-  const QDir packages(qEnvironmentVariable("LOCALAPPDATA") + "/Packages");
-  const QStringList claude = packages.entryList({"Claude_*"}, QDir::Dirs | QDir::NoDotAndDotDot);
-  if (!claude.isEmpty()) {
-    dir = packages.filePath(claude.first()) + "/LocalCache/Roaming/Claude";   // the packaged app's own %APPDATA%\Claude
-  } else {
-    dir = qEnvironmentVariable("APPDATA") + "/Claude";
-    if (!QFileInfo::exists(dir)) return {};
-  }
+  return {dir + "/claude_desktop_config.json"};
 #else
   const QString dir = QDir::homePath() + "/.config/Claude";
   if (!QFileInfo::exists(dir)) return {};
+  return {dir + "/claude_desktop_config.json"};
 #endif
-  return dir + "/claude_desktop_config.json";
 }
 
 bool inClaudeDesktop() {
-  QFile f(claudeDesktopConfig());
-  if (f.fileName().isEmpty() || !f.open(QIODevice::ReadOnly)) return false;
-  return QJsonDocument::fromJson(f.readAll()).object().value("mcpServers").toObject().contains("deepwater");
+  for (const QString& p : claudeDesktopConfigs())
+    if (claudedesktop::hasEntry(p, "deepwater")) return true;
+  return false;
 }
 
 bool setInClaudeDesktop(bool on, QString* error) {
-  const QString path = claudeDesktopConfig();
-  if (path.isEmpty()) { *error = QCoreApplication::translate("ai", "Claude Desktop is not installed on this computer."); return false; }
-  QJsonObject cfg;
-  QFile in(path);
-  if (in.exists()) {
-    if (!in.open(QIODevice::ReadOnly)) { *error = in.errorString(); return false; }
-    QJsonParseError pe;
-    const QJsonDocument d = QJsonDocument::fromJson(in.readAll(), &pe);
-    in.close();
-    // a file Deepwater cannot read is never overwritten: the user's other servers are in it
-    if (pe.error != QJsonParseError::NoError || !d.isObject()) {
-      *error = QCoreApplication::translate("ai", "%1 is not valid JSON: fix it or add the entry by hand.").arg(path);
-      return false;
-    }
-    cfg = d.object();
-    if (!QFileInfo::exists(path + ".deepwater-backup")) QFile::copy(path, path + ".deepwater-backup");
-  }
-  QJsonObject servers = cfg.value("mcpServers").toObject();
-  if (on) servers.insert("deepwater", QJsonObject{{"command", program()}, {"args", QJsonArray{"--mcp-stdio"}}});
-  else servers.remove("deepwater");
-  cfg.insert("mcpServers", servers);
-  QDir().mkpath(QFileInfo(path).absolutePath());
-  QSaveFile out(path);
-  if (!out.open(QIODevice::WriteOnly)) { *error = out.errorString(); return false; }
-  out.write(QJsonDocument(cfg).toJson());
-  if (!out.commit()) { *error = out.errorString(); return false; }
-  return true;
+  const QStringList paths = claudeDesktopConfigs();
+  if (paths.isEmpty()) { *error = QCoreApplication::translate("ai", "Claude Desktop is not installed on this computer."); return false; }
+  return claudedesktop::setEntry(paths, "deepwater", QJsonObject{{"command", program()}, {"args", QJsonArray{"--mcp-stdio"}}}, on, error,
+                                 QCoreApplication::translate("ai", "%1 is not valid JSON: fix it or add the entry by hand."));
 }
 }  // namespace ai::mcpbridge

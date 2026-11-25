@@ -1,6 +1,7 @@
 #include "core/Settings.h"
 #include <QSettings>
 #include <QDir>
+#include <QDebug>
 #include <memory>
 
 namespace {
@@ -44,5 +45,10 @@ void remove(const QString& key) {
   native().remove(k);
 }
 bool contains(const QString& key) { return value(key).isValid(); }
+void dropRetired() {
+  static const char* const kRetired[] = {"ai/slots", "ai/skills", "ai/claude/model", "ai/claude/effort", "ai/llm/part", "ml/source", "ml/prices"};
+  for (const char* k : kRetired)
+    if (contains(k)) { remove(k); qInfo("[settings] retired key removed: %s", k); }   // the name only, never the value
+}
 QString apiKey(const QString& name) { return value("keys." + name).toString().trimmed(); }
 }

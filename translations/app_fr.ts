@@ -429,8 +429,8 @@
         <translation>RETIRER DE CLAUDE DESKTOP</translation>
     </message>
     <message>
-        <source>Added to Claude Desktop. Restart Claude Desktop, and keep Deepwater open.</source>
-        <translation>Ajouté à Claude Desktop. Redémarrez Claude Desktop et gardez Deepwater ouvert.</translation>
+        <source>Added to Claude Desktop. Quit Claude Desktop completely and open it again, and keep Deepwater open. If Deepwater is not listed there, use the plug-in (see the documentation, Claude).</source>
+        <translation>Ajouté à Claude Desktop. Quittez complètement Claude Desktop et rouvrez-le, et gardez Deepwater ouvert. Si Deepwater n'y figure pas, utilisez le plug-in (voir la documentation, Claude).</translation>
     </message>
     <message>
         <source>Removed from Claude Desktop.</source>
@@ -719,6 +719,13 @@
     <message>
         <source>%1 is not valid JSON: fix it or add the entry by hand.</source>
         <translation>%1 n'est pas du JSON valide : corrigez-le ou ajoutez l'entrée à la main.</translation>
+    </message>
+</context>
+<context>
+    <name>app</name>
+    <message>
+        <source>Deepwater is already open on this computer. Look for its window in the taskbar.</source>
+        <translation>Deepwater est déjà ouvert sur cet ordinateur. Cherchez sa fenêtre dans la barre des tâches.</translation>
     </message>
 </context>
 </TS>

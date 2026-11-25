@@ -97,11 +97,18 @@ def http_status(port, token, method='POST', path='/mcp/ext', headers=None, body=
 
 conn_file = os.path.join(profile, 'mcp', 'connection.json')
 
-# ---- 1. no Deepwater open: the bridge says so, clearly, without crashing
-b = Bridge(env)
-a = b.send('initialize', {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'check', 'version': '1'}})
-check('Deepwater closed: the bridge answers with an error that says what to do', 'error' in a and 'not open' in json.dumps(a), a)
-b.close()
+# ---- 1. no Deepwater open: the handshake and the tools are there all the same (2026-11-25: a client that met an error here
+# dropped the tools for good); only a call says that Deepwater is closed. The same bridge goes on in 2b, once it is open.
+early = Bridge(env)
+a = early.send('initialize', {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'check', 'version': '1'}})
+check('Deepwater closed: initialize answers', a.get('result', {}).get('serverInfo', {}).get('name') == 'deepwater', a)
+early.send('notifications/initialized', request=False)
+a = early.send('tools/list')
+closed_tools = a.get('result', {}).get('tools', [])
+check('Deepwater closed: the tools are listed', len(closed_tools) == (25 if with_journal else 24), len(closed_tools))
+check('Deepwater closed: ping answers', 'result' in early.send('ping'))
+a = early.call('get_market_hours')
+check('Deepwater closed: a call says what to do', a.get('result', {}).get('isError') is True and 'not open' in text_of(a), a)
 
 # ---- 2. Deepwater open, Claude's access on
 app = subprocess.Popen([exe, '--lang', 'en', '--size', '1200x800', '--quit-after', '240000'], env=env,
@@ -126,6 +133,10 @@ try:
     b.send('notifications/initialized', request=False)
     a = b.send('tools/list')
     tools = [t['name'] for t in a['result']['tools']]
+    check('the same list, Deepwater closed or open', a['result']['tools'] == closed_tools)
+    a2 = early.call('get_market_hours')
+    check('a bridge started while Deepwater was closed answers once it is open', a2.get('result', {}).get('isError') is False, a2)
+    early.close()
     print('      %d tools: %s' % (len(tools), ', '.join(tools)))
     check('%d tools are offered' % (25 if with_journal else 24), len(tools) == (25 if with_journal else 24), len(tools))
     check('the trading journal is %s' % ('offered when switched on' if with_journal else 'not offered by default'),

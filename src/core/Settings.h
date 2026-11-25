@@ -13,4 +13,7 @@ bool contains(const QString& key);
 // API key saved by the user (key "keys.<name>"), empty if none. Never log the result.
 QString apiKey(const QString& name);
 bool isTestProfile();
+// Removes the keys of tabs that no longer exist (Graphics and AI, retired in 0.3.1 and 0.4.0), left in the store by older versions.
+// Only those exact keys: nothing the app still reads. Run once a launch; a key already gone costs nothing.
+void dropRetired();
 }

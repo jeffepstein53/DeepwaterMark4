@@ -334,7 +334,7 @@ void Body::mousePressEvent(QMouseEvent* e) {
     QString err;
     const bool want = !m_inDesktop;
     m_claudeNote = ai::mcpbridge::setInClaudeDesktop(want, &err)
-                       ? (want ? otr("Added to Claude Desktop. Restart Claude Desktop, and keep Deepwater open.") : otr("Removed from Claude Desktop."))
+                       ? (want ? otr("Added to Claude Desktop. Quit Claude Desktop completely and open it again, and keep Deepwater open. If Deepwater is not listed there, use the plug-in (see the documentation, Claude).") : otr("Removed from Claude Desktop."))
                        : err;
     refreshClaude();
     if (auto* d = qobject_cast<OptionsDialog*>(window())) d->fit();

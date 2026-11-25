@@ -1,6 +1,8 @@
 #pragma once
 #include <QObject>
 #include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QList>
 #include <QPointer>
 #include <QString>
@@ -37,6 +39,10 @@ public:
   // %APPDATA% is a private copy.
   static QString connectionFile();
   int externalCalls() const { return m_extCalls; }   // since launch
+  // What the server says of itself, the same with or without a window: the bridge (ai/McpBridge.h) answers the handshake
+  // with these, so that a client started before Deepwater still gets its tools.
+  static QJsonObject initializeResult(const QString& protocolVersion);
+  static QJsonArray toolList(bool withJournal);
 signals:
   void externalChanged();
 

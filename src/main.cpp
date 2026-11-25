@@ -11,10 +11,14 @@
 #include <QCommandLineParser>
 #include <QTimer>
 #include <QLineEdit>
+#include <QMessageBox>
 #include "app/HelpWindow.h"
 #include "app/Zoom.h"
 #include "app/Updater.h"
 #include "app/Background.h"
+#include "app/SingleInstance.h"
+#include "core/Paths.h"
+#include "core/Settings.h"
 #include "ai/McpBridge.h"
 #include "ai/McpServer.h"
 #include <QFile>
@@ -85,6 +89,21 @@ int main(int argc, char** argv) {
   i18n::installSaved();
   if (cli.isSet("theme")) theme::setCurrent(cli.value("theme"));
   if (cli.isSet("lang")) i18n::setLanguage(cli.value("lang") == "fr" ? i18n::Lang::French : i18n::Lang::English);
+#if !defined(Q_OS_IOS) && !defined(Q_OS_ANDROID)
+  // One Deepwater per data folder (app/SingleInstance.h): a second one says so and ends. The audits have their own profile and
+  // are left alone; an update's relaunch comes after the old process has ended (the lock is free by then).
+  std::unique_ptr<QLockFile> instanceLock;
+  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) {
+    instanceLock = app::singleinstance::acquire(paths::data(), 1500);
+    if (!instanceLock) {
+      qInfo("[app] another Deepwater holds this profile: not opening a second one");
+      QMessageBox::information(nullptr, QStringLiteral("Deepwater"),
+                               QCoreApplication::translate("app", "Deepwater is already open on this computer. Look for its window in the taskbar."));
+      return 0;
+    }
+  }
+#endif
+  settings::dropRetired();   // keys left by the tabs removed in 0.3.1 and 0.4.0
   MainWindow w;
   account::BridgeSync::instance();   // live MT4/MT5/cTrader sync runs from launch, not from the first visit
   if (cli.isSet("page") && !w.openPage(cli.value("page"))) qWarning("unknown page %s", qPrintable(cli.value("page")));

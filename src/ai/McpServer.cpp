@@ -36,6 +36,24 @@ QByteArray rpcError(const QJsonValue& id, int code, const QString& msg) {
 }
 }  // namespace
 
+QJsonObject McpServer::initializeResult(const QString& v) {
+  return QJsonObject{
+      {"protocolVersion", v.isEmpty() ? QStringLiteral("2025-06-18") : v},
+      {"capabilities", QJsonObject{{"tools", QJsonObject{{"listChanged", false}}}}},
+      {"serverInfo", QJsonObject{{"name", "deepwater"}, {"version", "1.0"}}},
+      {"instructions", QString("Deepwater's data, as the trading terminal open on this computer shows it (markets, news, calendar, "
+                               "economy, positioning…). Read only. Quote figures as the tools give them, with their time; never "
+                               "invent a missing one. ") + kExternalRule}};
+}
+
+QJsonArray McpServer::toolList(bool withJournal) {
+  QJsonArray tools;
+  for (const auto& t : Tools::instance().forSkills(kSkills))
+    if (withJournal || t.name != QLatin1String(kJournalTool))
+      tools.append(QJsonObject{{"name", t.name}, {"description", t.description}, {"inputSchema", t.parameters}});
+  return tools;
+}
+
 McpServer& McpServer::instance() { static McpServer* s = new McpServer; return *s; }
 
 McpServer::McpServer() { m_extToken = randomToken(); }
@@ -173,22 +191,12 @@ void McpServer::handle(QTcpSocket* s, const QByteArray& method, const QByteArray
   const QJsonObject params = rq.value("params").toObject();
 
   if (m == "initialize") {
-    const QString v = params.value("protocolVersion").toString();
-    reply(s, 200, rpcResult(id, QJsonObject{
-        {"protocolVersion", v.isEmpty() ? QStringLiteral("2025-06-18") : v},
-        {"capabilities", QJsonObject{{"tools", QJsonObject{{"listChanged", false}}}}},
-        {"serverInfo", QJsonObject{{"name", "deepwater"}, {"version", "1.0"}}},
-        {"instructions", QString("Deepwater's data, as the trading terminal open on this computer shows it (markets, news, calendar, "
-                                 "economy, positioning…). Read only. Quote figures as the tools give them, with their time; never "
-                                 "invent a missing one. ") + kExternalRule}}));
+    reply(s, 200, rpcResult(id, initializeResult(params.value("protocolVersion").toString())));
     return;
   }
   if (m == "ping") { reply(s, 200, rpcResult(id, {})); return; }
   if (m == "tools/list") {
-    QJsonArray tools;
-    for (const auto& t : Tools::instance().forSkills(kSkills))
-      if (offered(t.name)) tools.append(QJsonObject{{"name", t.name}, {"description", t.description}, {"inputSchema", t.parameters}});
-    reply(s, 200, rpcResult(id, QJsonObject{{"tools", tools}}));
+    reply(s, 200, rpcResult(id, QJsonObject{{"tools", toolList(journalIncluded())}}));
     return;
   }
   if (m == "tools/call") { handleCall(s, id, params); return; }

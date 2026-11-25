@@ -1,7 +1,7 @@
 // On-device text recognition on Windows (native parity, 2026-11-22): Windows.Media.Ocr, part of Windows 10 and 11,
 // behind the interface macro/Ocr.mm gives on macOS and iOS with Apple Vision (macro/Ocr.h). It reads the RBA / RBNZ
 // probability pictures (macro/CentralBanksMore.cpp), which were not read at all on Windows before.
-// Synchronous like the Vision version: called from a worker thread, which joins the COM multithreaded apartment.
+// Synchronous like the Vision version: called from a worker thread, in the COM multithreaded apartment (keepApartment).
 // Lines come back with their box in image units 0..1, origin top-left (the words' boxes joined), as Vision gives them.
 #ifdef _WIN32
 #include "macro/Ocr.h"
@@ -9,6 +9,10 @@
 #include <QtDebug>
 #include <algorithm>
 #include <cstring>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <combaseapi.h>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -23,15 +27,16 @@ namespace wf = winrt::Windows::Foundation;
 namespace gi = winrt::Windows::Graphics::Imaging;
 namespace mo = winrt::Windows::Media::Ocr;
 
-void joinApartment() {
-  thread_local bool joined = false;
-  if (joined) return;
-  joined = true;
-  try {
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
-  } catch (const winrt::hresult_error&) {
-    // the thread already has an apartment (RPC_E_CHANGED_MODE): OCR works from either kind
-  }
+// The multithreaded apartment lives as long as the program, whichever threads come and go. C++/WinRT caches the OCR classes'
+// factories for the whole process: an apartment joined by a pool thread alone went away with that thread (30 s idle), its DLLs
+// were unloaded, and the next picture called a factory that was no longer there (crash of 0.4.2, 2026-11-25: 0xc0000005 in
+// Language(L"en-US")). A thread without an apartment of its own is in this one.
+void keepApartment() {
+  static const HRESULT kept = [] {
+    CO_MTA_USAGE_COOKIE cookie{};   // never given back, on purpose
+    return CoIncrementMTAUsage(&cookie);
+  }();
+  if (FAILED(kept)) qWarning("[ocr] no multithreaded apartment (0x%08lx)", (unsigned long)kept);
 }
 
 mo::OcrEngine engine() {
@@ -51,7 +56,7 @@ QList<Line> recognize(const QByteArray& imageData) {
   if (imageData.isEmpty()) return out;
   QImage img = QImage::fromData(imageData);
   if (img.isNull()) return out;
-  joinApartment();
+  keepApartment();
   try {
     const mo::OcrEngine e = engine();
     if (!e) {
