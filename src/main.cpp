@@ -14,6 +14,7 @@
 #include "app/HelpWindow.h"
 #include "app/Zoom.h"
 #include "app/Updater.h"
+#include "app/Background.h"
 #include "ai/McpBridge.h"
 #include "ai/McpServer.h"
 #include <QFile>
@@ -102,6 +103,8 @@ int main(int argc, char** argv) {
   if (cli.isSet("options")) QTimer::singleShot(300, &w, [&w] { w.showOptions(); });
   // updates (app/Updater): the launch check and the release WebSocket; not during the audits, which measure pages
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) app::Updater::instance().start();
+  // data kept warm while no page shows it (app/Background, Options > Data): after the first page and the launch's requests
+  if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) QTimer::singleShot(20000, &app, [] { app::Background::instance().start(); });
 #ifndef Q_OS_IOS
   // Claude (Options > Claude): served while the app runs, when switched on
   if (!cli.isSet("layout-audit") && !cli.isSet("perf-audit")) {

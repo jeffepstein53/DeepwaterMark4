@@ -116,9 +116,9 @@ La colonne de droite place la position nette de chaque catégorie sur un repère
 
 ### D'où viennent les données
 
-Les données viennent de l'API publique de la CFTC, futures seuls : environ cinq ans de rapports hebdomadaires par marché, gardés 6 heures. Les positions sont celles du mardi, publiées le vendredi à 15 h 30, heure de New York. Le pied de page affiche l'heure de publication ; survolez **OFFICIEL** pour les dates du rapport et de publication. Les prix sont des bougies quotidiennes Yahoo Finance, et aucune clé n'est nécessaire.
+Les données viennent de l'API publique de la CFTC, futures seuls : environ cinq ans de rapports hebdomadaires par marché, gardés 6 heures. Dès qu'un rapport est attendu (vendredi 15 h 30, heure de New York) et manque, il est redemandé aussitôt, puis toutes les 10 minutes pendant trois heures et toutes les heures ensuite. Les positions sont celles du mardi, publiées le vendredi à 15 h 30, heure de New York. Le pied de page affiche l'heure de publication ; survolez **OFFICIEL** pour les dates du rapport et de publication. Les prix sont des bougies quotidiennes Yahoo Finance, et aucune clé n'est nécessaire.
 
-Revenir sur la page recharge le marché quand ses données ont plus de 6 heures ou que le dernier chargement a échoué. Les messages au-dessus des panneaux signalent une erreur de la CFTC, l'absence de l'un des deux rapports (certains panneaux restent alors vides), ou **CFTC injoignable — rapport en cache affiché**.
+Un nouveau rapport s'affiche tout seul quand la page est ouverte. Revenir sur la page recharge le marché quand ses données sont trop vieilles ou que le dernier chargement a échoué. Les messages au-dessus des panneaux signalent une erreur de la CFTC, l'absence de l'un des deux rapports (certains panneaux restent alors vides), ou **CFTC injoignable — rapport en cache affiché**.
 
 ## Positionnement bancaire
 
@@ -215,4 +215,4 @@ Chaque ligne affiche la lecture brute, le percentile et une barre, et le survol 
 
 ### D'où viennent les données
 
-Toutes les lectures sont des clôtures quotidiennes Yahoo Finance : VIX, S&P 500, HYG, LQD, AUD/JPY, futures cuivre et or, et bitcoin. Elles sont gardées en cache 30 minutes et redemandées toutes les 30 minutes tant que la page est affichée ; le pied de page donne l'heure de mise à jour. Si Yahoo Finance est injoignable, les panneaux affichent **Clôtures quotidiennes Yahoo Finance indisponibles**. Aucune clé n'est nécessaire.
+Toutes les lectures sont des clôtures quotidiennes Yahoo Finance : VIX, S&P 500, HYG, LQD, AUD/JPY, futures cuivre et or, et bitcoin. Elles sont redemandées toutes les 5 minutes tant que la page est affichée ; le pied de page donne l'heure de mise à jour. Si Yahoo Finance est injoignable, les panneaux affichent **Clôtures quotidiennes Yahoo Finance indisponibles**. Aucune clé n'est nécessaire.

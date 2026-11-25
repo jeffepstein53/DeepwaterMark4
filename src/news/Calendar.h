@@ -95,6 +95,10 @@ public:
   QList<QDate> recordedWeeks() const;
   QDateTime lastRefresh() const { return m_lastRefresh; }   // last successful download (UTC)
   void refresh();                                      // re-download now (paced by net::)
+  // One poll of the actuals feed now; `actualsPolled` follows. A copy younger than 5 min is served without a request
+  // (the source asks for one per 5 min at most; news/ActualsPace.h).
+  void refreshActuals() { fetchMyfxbook(); }
+  QDateTime lastActuals() const { return m_lastActuals; }   // when the actuals feed was last downloaded (UTC)
 
   // Live polling (actuals) while at least one owner is active.
   void setActive(QObject* owner, bool active);
@@ -120,11 +124,14 @@ signals:
   void weekLoaded(const QDate& weekStart);
   void actualArrived(const news::Event& e);
   void refreshed();
+  void actualsPolled();                                // an actuals poll came back (answer, cached copy or error)
 
 private:
   Calendar();
   void fetchForexFactory(const QString& which);       // "thisweek" / "nextweek"
   void fetchMyfxbook();
+  void planPoll();                                     // sets the timer: 5 min after the last request, or just after a release (news/ActualsPace.h)
+  QList<QDateTime> awaitedReleases() const;            // medium / high impact figures of this week still to come, or out for less than ten minutes
   void mergeWeek(const QDate& week, const QList<Event>& fresh);
   void readWeek(const QDate& week);
   void saveWeek(const QDate& week);
@@ -145,8 +152,9 @@ private:
   void buildReleaseIndex() const;
   mutable QHash<QDate, Releases> m_releaseIndex;
   mutable bool m_indexStarted = false, m_indexReady = false;
-  QDateTime m_lastRefresh;
+  QDateTime m_lastRefresh, m_lastActuals;
+  QDateTime m_lastActualsTry;                          // last request that left the machine, answered or not
   QSet<QObject*> m_active;
-  QTimer m_poll;
+  QTimer m_poll;                                       // single shot, set by planPoll
 };
 }

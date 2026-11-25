@@ -12,6 +12,7 @@ import http.client
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -149,6 +150,40 @@ try:
     check("get_news: third parties' text is marked as data (when it answers)", a['result'].get('isError') or t.startswith('<external-text'), t[:120])
     a = b.call('get_economic_calendar', {})
     check('get_economic_calendar answers', 'result' in a, a)
+
+    # ---- 2b. freshness (0.4.2): a tool must not answer from a memory nothing has refreshed. On 2026-11-24 get_quotes
+    # gave quotes 35 minutes old under the label "Live quotes", and get_news stories 54 minutes old at its first call.
+    def fetched_at(text):
+        m = re.search(r'Fetched from Yahoo at (\d\d:\d\d:\d\d) UTC \((\d+) s ago\)', text)
+        return (m.group(1), int(m.group(2))) if m else None
+    q1 = text_of(b.call('get_quotes', {'symbols': ['EURUSD', 'BTCUSD']}))
+    f1 = fetched_at(q1)
+    check('get_quotes says when its quotes were fetched, and fetched them just now', f1 is not None and f1[1] <= 20, q1[-220:])
+    time.sleep(25)
+    q2 = text_of(b.call('get_quotes', {'symbols': ['EURUSD', 'BTCUSD']}))
+    f2 = fetched_at(q2)
+    check('get_quotes 25 s later asks again: the fetch time moves forward', bool(f1 and f2 and f2[0] > f1[0]), (f1, f2))
+    q3 = text_of(b.call('get_quotes', {'symbols': ['EURUSD', 'BTCUSD']}))
+    f3 = fetched_at(q3)
+    check('get_quotes twice within 15 s does not ask Yahoo again (the same fetch time)', bool(f2 and f3 and f3[0] == f2[0]), (f2, f3))
+    # long answers on purpose: cut at 6000 characters, they lost this last line
+    t = text_of(b.call('get_news', {'max': 25}))
+    check('get_news says how old its newest download is, even when the list is cut', 'Newest feed download' in t, t[-200:])
+    t = text_of(b.call('get_squawk', {'max': 50}))
+    check('get_squawk says how old its polls are, even when the list is cut', 'Feeds last polled' in t, t[-200:])
+    t = text_of(b.call('get_economic_calendar', {'days_ahead': 7, 'days_back': 7}))
+    check('get_economic_calendar says how old its actuals are, even when the list is cut', 'Actuals feed last downloaded' in t, t[-200:])
+    t = text_of(b.call('get_risk_sentiment'))
+    check('get_risk_sentiment says how old its inputs are', ' ago)' in t, t[:240])
+    # the odds need the Fed's futures (32 Yahoo series at a third of a second): the first call may come too early
+    t = ''
+    for _ in range(3):
+        t = text_of(b.call('get_central_banks'))
+        if re.search(r'Federal Reserve[^\n]*odds computed', t):
+            break
+    m = re.search(r'Federal Reserve[^\n]*odds computed (\d+) (s|min) ago', t)
+    check('get_central_banks says when the Fed odds were computed, at most 5 min ago',
+          bool(m and int(m.group(1)) * (60 if m.group(2) == 'min' else 1) <= 300), t[:300])
 
     # ---- 3. strangers
     check('no key: refused (401)', http_status(port, None) == 401)

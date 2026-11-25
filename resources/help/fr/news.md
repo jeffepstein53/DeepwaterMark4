@@ -47,7 +47,7 @@ Plus bas, les cases **CONSENSUS**, **FOURCHETTE**, **PRÉCÉDENT** et **RÉEL** 
 
 Les événements, l'impact, les prévisions et les chiffres précédents viennent du calendrier hebdomadaire de ForexFactory. Deepwater le recharge toutes les 30 minutes tant que la page est affichée. Les résultats sont enregistrés à leur sortie, à partir de trois sources :
 
-- le flux RSS du calendrier Myfxbook, consulté toutes les 5 minutes tant que la page est affichée ;
+- le flux RSS du calendrier Myfxbook, consulté au plus toutes les 5 minutes tant que Deepwater tourne ; la consultation est placée environ une minute après chaque publication d'impact moyen ou fort ;
 - les titres chiffrés du fil (FinancialJuice, investingLive), retenus seulement si la devise, l'heure de publication, les mots de l'indicateur, l'unité et la prévision ou le précédent cités concordent ;
 - les séries officielles (OCDE, BLS, Banque du Canada) pour les publications passées.
 
@@ -92,14 +92,14 @@ L'article affiche la source et l'heure, une pastille de langue qui bascule entre
 |---|---|---|
 | investingLive | 2 min | active |
 | Yahoo Finance | 5 min | active |
-| CNBC | 5 min | active |
-| MarketWatch | 5 min | active |
-| Banques centrales (Fed, BCE, Banque d'Angleterre) | 15 min | active |
+| CNBC | 2 min | active |
+| MarketWatch | 2 min | active |
+| Banques centrales (Fed, BCE, Banque d'Angleterre) | 5 min | active |
 | FinancialJuice | 2 min | masquée |
 | Nasdaq | 10 min | masquée |
 | Investing.com | 5 min | masquée |
 
-Les flux ne sont consultés que tant que la page est affichée. Les articles sont gardés 4 jours, 900 au plus, et les images restent 7 jours en cache. Beaucoup de flux n'ont pas d'image : une vignette générée la remplace.
+Les flux sont consultés tant que la page est affichée, et en arrière-plan quand **Options › Données** garde les données fraîches (activé par défaut). Les articles sont gardés 4 jours, 900 au plus, et les images restent 7 jours en cache. Beaucoup de flux n'ont pas d'image : une vignette générée la remplace.
 
 ## Recherche bancaire
 

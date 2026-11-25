@@ -69,7 +69,7 @@ QString RiskIndex::zoneLabel(double v) {
   return QCoreApplication::translate("positioning", l[zone(v)]);   // translated at call time, never cached
 }
 
-void RiskIndex::load() {
+void RiskIndex::load(int ttlSec) {
   if (m_left > 0) return;
   const QStringList syms = inputs();
   m_left = syms.size();
@@ -88,7 +88,7 @@ void RiskIndex::load() {
       }
       m_in.insert(s, out);
       if (--m_left == 0) { m_fetched = QDateTime::currentDateTime(); compute(); emit updated(); }
-    }, 1800, true);
+    }, ttlSec, true);
   }
 }
 

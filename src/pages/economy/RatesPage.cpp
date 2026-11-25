@@ -1022,7 +1022,7 @@ void RatesPage::mousePressEvent(QMouseEvent* e) {
 }
 
 void RatesPage::showEvent(QShowEvent*) {
-  CentralBanks::instance().ensureLoaded();
+  CentralBanks::instance().setActive(this, true);   // loads what is stale, then keeps it fresh while shown
   eco::Blink::instance().hold(this, true);
   if (m_hooksDone) return;
   m_hooksDone = true;
@@ -1042,7 +1042,10 @@ void RatesPage::showEvent(QShowEvent*) {
       }
     });
 }
-void RatesPage::hideEvent(QHideEvent*) { eco::Blink::instance().hold(this, false); }
+void RatesPage::hideEvent(QHideEvent*) {
+  CentralBanks::instance().setActive(this, false);
+  eco::Blink::instance().hold(this, false);
+}
 void RatesPage::preload() { CentralBanks::instance().ensureLoaded(); }
 
 DW_PAGE("economy/rates", RatesPage)

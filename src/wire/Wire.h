@@ -66,6 +66,12 @@ public:
   // With no visible consumer the headline feeds still refresh every 10 min so the archive stays complete.
   void setActive(QObject* owner, bool active);
 
+  // Polls now every feed whose last request is older than its active pace (never faster: the pace is what each
+  // publisher asks for). For the tools Claude reads with: with no page shown the feeds only follow their idle pace
+  // (10 to 30 min), so a tool would otherwise answer with items of a quarter of an hour ago.
+  void refreshNow();
+  bool busy() const { return m_inflight > 0; }
+
   // Live items (last 24 h, at least the newest 150), newest first. max < 0: all.
   QList<Item> items(Filter f = Filter::All, int max = -1) const;
   int count(Filter f) const;
@@ -85,9 +91,12 @@ signals:
   void changed();                         // items added (any kind)
   void itemsAdded(const QList<wire::Item>& fresh);
   void moversChanged();                   // live move snapshot changed (prices or set)
+  void settled();                         // every feed request started has come back
 
 private:
   Wire();
+  void settle();
+  int m_inflight = 0;
   struct Feed { QString id, name, url; int activeSec, idleSec; QDateTime last; QDateTime due; QString error; bool busy = false; };
   void schedule();
   void fetch(Feed& f);

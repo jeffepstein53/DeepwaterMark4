@@ -1,4 +1,5 @@
 #include "positioning/Cot.h"
+#include "positioning/CotPace.h"
 #include "net/Http.h"
 #include "net/Sources.h"
 #include <QJsonDocument>
@@ -213,8 +214,12 @@ void Cot::load(const QString& key, QObject* ctx, Callback cb) {
   const bool deep = key.endsWith("#deep");
   const CotMarket* mk = market(id);
   if (!mk) { CotHistory h; h.error = "unknown market " + id; QTimer::singleShot(0, ctx ? ctx : this, [cb, h] { cb(h); }); return; }
-  if (auto it = m_done.constFind(key); it != m_done.cend() && it->fetched.secsTo(QDateTime::currentDateTimeUtc()) < 6 * 3600) {
-    const CotHistory h = *it;
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  const auto known = m_done.constFind(key);
+  // the whole history (Facts) is kept 6 h whatever happens; the pages' one follows the weekly publication
+  const int maxAge = deep || known == m_done.cend() ? cotpace::kUpToDateSec : cotpace::maxAgeSec(known->weeks.last().date, now);
+  if (known != m_done.cend() && known->fetched.secsTo(now) < maxAge) {
+    const CotHistory h = *known;
     QTimer::singleShot(0, ctx ? ctx : this, [cb, h] { cb(h); });
     return;
   }
@@ -222,10 +227,16 @@ void Cot::load(const QString& key, QObject* ctx, Callback cb) {
   Load& ld = m_loading[key];
   ld.waiters << Pending{ctx, ctx != nullptr, std::move(cb)};
   if (already) return;
-  ld.left = 2;
+  issue(key, deep ? 24 * 3600 : maxAge);
+}
+
+void Cot::issue(const QString& key, int ttlSec) {
+  const bool deep = key.endsWith("#deep");
+  const CotMarket* mk = market(key.section('#', 0, 0));
+  m_loading[key].left = 2;
   const auto& second = mk->second == CotReport::Tff ? tffFields() : disFields();
-  auto issue = [this, key, deep](const QUrl& u, bool isSecond) {
-    net::Request r; r.url = u; r.ttlSec = deep ? 24 * 3600 : 6 * 3600; r.timeoutMs = deep ? 120000 : 45000;
+  auto ask = [this, key, deep, ttlSec](const QUrl& u, bool isSecond) {
+    net::Request r; r.url = u; r.ttlSec = ttlSec; r.timeoutMs = deep ? 120000 : 45000;
     net::get(r, this, [this, key, isSecond](const net::Reply& rep) {
       Load& l = m_loading[key];
       if (!rep.ok()) l.error = rep.error.isEmpty() ? QString("HTTP %1").arg(rep.status) : rep.error;
@@ -235,8 +246,15 @@ void Cot::load(const QString& key, QObject* ctx, Callback cb) {
       if (--l.left == 0) finish(key);
     });
   };
-  issue(urlOf("6dca-aqww", mk->code, legacyFields(), deep), false);
-  issue(urlOf(mk->second == CotReport::Tff ? "gpe5-46if" : "72hh-3qpy", mk->code, second, deep), true);
+  ask(urlOf("6dca-aqww", mk->code, legacyFields(), deep), false);
+  ask(urlOf(mk->second == CotReport::Tff ? "gpe5-46if" : "72hh-3qpy", mk->code, second, deep), true);
+}
+
+bool Cot::due(const QString& id) const {
+  const auto it = m_done.constFind(id);
+  if (it == m_done.cend()) return true;
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  return it->fetched.secsTo(now) >= cotpace::maxAgeSec(it->weeks.last().date, now);
 }
 
 // Both answers are in: the reports (the whole CFTC history for a Facts import: a few MB of JSON) are parsed on a pool
@@ -247,12 +265,24 @@ void Cot::finish(const QString& key) {
   auto* w = new QFutureWatcher<CotHistory>(this);
   connect(w, &QFutureWatcher<CotHistory>::finished, this, [this, w, key] {
     w->deleteLater();
+    // served from the cache, and a report published since is not in it: asked again, once, before anyone is answered
+    if (Load& cur = m_loading[key]; !key.endsWith("#deep") && !cur.again && !cur.stale && cur.error.isEmpty()) {
+      const CotHistory first = w->result();
+      const QDateTime now = QDateTime::currentDateTimeUtc();
+      const int maxAge = first.weeks.isEmpty() ? cotpace::kUpToDateSec : cotpace::maxAgeSec(first.weeks.last().date, now);
+      if (cur.fetched.isValid() && cur.fetched.secsTo(now) >= maxAge) {
+        cur.again = true;
+        cur.legacy.clear(); cur.second.clear(); cur.fetched = {};
+        issue(key, maxAge);
+        return;
+      }
+    }
     Load ld = m_loading.take(key);
     CotHistory h = w->result();
     h.stale = ld.stale; h.fetched = ld.fetched;
     if (h.weeks.isEmpty()) h.error = ld.error.isEmpty() ? "no CFTC rows for " + h.market.code : ld.error;
     else if (!ld.error.isEmpty()) h.warning = ld.error;   // one report missing: shown, but asked again next time
-    // only a complete history is kept for 6 h: a partial one would leave the other report's panels empty that long
+    // only a complete history is kept: a partial one would leave the other report's panels empty for hours
     if (h.ok() && h.warning.isEmpty()) m_done.insert(key, h);
     for (const auto& p : ld.waiters) {
       if (p.hasCtx && !p.ctx) continue;

@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QString>
 #include <QSet>
+#include <QTimer>
 #include <cmath>
 
 // The 8 central banks of the FX majors: policy rate, meeting calendar, market-implied odds, implied path,
@@ -117,6 +118,11 @@ class CentralBanks : public QObject {
 public:
   static CentralBanks& instance();
   void ensureLoaded();
+  // A page showing the odds is on screen (RatesPage, Overview): the Fed's and the ECB's, the only ones that move during
+  // the day with a source that allows it (CME futures via Yahoo), are asked every 5 min instead of 15 min / 1 h.
+  void setActive(QObject* owner, bool active);
+  // Fed and ECB odds older than `maxAgeSec` are asked again now (Claude's tool); `updated` follows.
+  void refreshOdds(int maxAgeSec);
   const QList<Bank>& banks() const { return m_banks; }
   const Bank* bank(const QString& key) const;   // id, code, currency or iso2 (case-insensitive)
 
@@ -150,6 +156,8 @@ private:
   QList<Bank> m_banks;
   QHash<QString, QVector<QPair<QDate, double>>> m_rateHist;   // id → daily policy rate (BIS / official)
   QHash<QString, qint64> m_started;
+  QSet<QObject*> m_active;
+  QTimer m_activeTimer;
   bool m_polyOk = false;
   QString m_polyStatus;
   bool m_emitQueued = false;

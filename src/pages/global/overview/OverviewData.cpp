@@ -119,9 +119,10 @@ OverviewData::OverviewData(SquawkPanel* sq, RiskPanel* risk, CentralBanksPanel* 
   connect(&positioning::RiskIndex::instance(), &positioning::RiskIndex::updated, this, [this] { pushRisk(); });
   connect(&macro::CentralBanks::instance(), &macro::CentralBanks::updated, this, [this] { pushBanks(); });
   // RiskIndex::load() is only called on show: a page left open for hours kept the morning's reading. Ask again every
-  // 30 minutes (its own cache period) while visible.
-  m_riskTimer.setInterval(30 * 60 * 1000);
-  connect(&m_riskTimer, &QTimer::timeout, this, [] { positioning::RiskIndex::instance().load(); });
+  // 5 minutes while visible; the age accepted from the cache is shorter than that (with the same 5 minutes, an answer
+  // that took a few seconds to come was still "fresh" at the next tick: one reload in two was served from the cache).
+  m_riskTimer.setInterval(5 * 60 * 1000);
+  connect(&m_riskTimer, &QTimer::timeout, this, [] { positioning::RiskIndex::instance().load(240); });
   pushSquawk();
   pushRisk();
   pushBanks();
@@ -134,9 +135,9 @@ void OverviewData::setVisible(bool on) {
   if (on == m_visible) return;
   m_visible = on;
   wire::Wire::instance().setActive(this, on);
+  macro::CentralBanks::instance().setActive(this, on);   // loads what is stale, then Fed and ECB odds every 5 min while shown
   if (on) {
-    positioning::RiskIndex::instance().load();        // cached 30 min, cheap to call again
-    macro::CentralBanks::instance().ensureLoaded();   // idempotent, refreshes stale parts
+    positioning::RiskIndex::instance().load(240);     // what is under 4 min old comes from the cache
     pushSquawk();
     if (m_sq->french()) translateMissing();   // wire changes while hidden were not looked at
     m_riskTimer.start();

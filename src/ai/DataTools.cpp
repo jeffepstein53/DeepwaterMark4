@@ -55,11 +55,22 @@ constexpr int kMaxChars = 6000;
 QString num(double v, int dec = 2) { return std::isfinite(v) ? QString::number(v, 'f', dec) : QStringLiteral("n/a"); }
 QString pct(double v, int dec = 2) { return std::isfinite(v) ? (v > 0 ? "+" : "") + QString::number(v, 'f', dec) + "%" : QStringLiteral("n/a"); }
 QString utc(const QDateTime& t) { return t.isValid() ? t.toUTC().toString("yyyy-MM-dd HH:mm") + " UTC" : QStringLiteral("n/a"); }
-QString cap(QString s) {
-  if (s.size() > kMaxChars) s = s.left(kMaxChars) + "\n[cut: result longer than " + QString::number(kMaxChars) + " characters; ask for less]";
-  return s;
+// "12 s ago", "7 min ago", "2.5 h ago": how old a datum is, so a tool never hands over an old figure as a fresh one
+QString ageText(qint64 ms) {
+  const qint64 s = qMax<qint64>(0, ms) / 1000;
+  if (s < 90) return QString::number(s) + " s ago";
+  if (s < 5400) return QString::number((s + 30) / 60) + " min ago";
+  return QString::number(double(s) / 3600.0, 'f', 1) + " h ago";
 }
-ToolResult okText(const QString& s) { return {true, cap(s)}; }
+QString ageText(const QDateTime& t) { return t.isValid() ? ageText(t.msecsTo(QDateTime::currentDateTimeUtc())) : QStringLiteral("unknown age"); }
+// `tail`: what must be said even when the list before it is cut (how old the data is, what is not available)
+QString cap(QString s, const QString& tail = {}) {
+  const qsizetype room = kMaxChars - tail.size();
+  if (s.size() > room)
+    s = s.left(room) + "\n[cut: result longer than " + QString::number(kMaxChars) + " characters; ask for less]" + (tail.isEmpty() ? "" : "\n");
+  return s + tail;
+}
+ToolResult okText(const QString& s, const QString& tail = {}) { return {true, cap(s, tail)}; }
 ToolResult fail(const QString& s) { return {false, s}; }
 int intArg(const QJsonObject& a, const char* k, int def, int lo, int hi) {
   const QJsonValue v = a.value(k);
@@ -171,16 +182,31 @@ void quotes(const QJsonObject& a, ToolDone done) {
                                                                     ? " (last trade, not now: market closed or no recent trade)" : ""));
     }
     if (!unknown.isEmpty()) out += "Unknown symbols (not read): " + unknown.join(", ") + "\n";
+    // how fresh the answer is: the "time" column is the last trade (old for a closed market), this is when Deepwater asked
+    qint64 oldest = -1; bool unknownAge = false;
+    for (auto* i : ins) {
+      if (!h.quote(i->symbol).valid()) continue;
+      const qint64 age = h.ageMs(i->symbol);
+      if (age < 0) unknownAge = true; else oldest = qMax(oldest, age);
+    }
+    if (unknownAge || oldest > 60000)
+      out += "WARNING: the refresh did not complete (Yahoo did not answer in time): " +
+             (unknownAge ? QString("some quotes are cached copies of unknown age") : "the oldest quote was fetched " + ageText(oldest)) + ".\n";
+    else if (oldest >= 0)
+      out += "Fetched from Yahoo at " + QDateTime::currentDateTimeUtc().addMSecs(-oldest).toString("HH:mm:ss") + " UTC (" + ageText(oldest) + ").\n";
     market::QuoteHub::instance().unsubscribe(owner);
     owner->deleteLater();
     done(okText(out));
   };
-  bool all = true;
-  for (const auto& s : syms) if (!hub.quote(s).valid()) all = false;
-  hub.subscribe(owner, syms, true);
-  if (all) { answer(); return; }
-  hub.refreshNow();
-  waitSignal(&hub, &market::QuoteHub::updated, 8000, answer);
+  // A quote nothing has refreshed for more than 15 s is asked again before answering: pages poll only while shown, so
+  // the memory can hold a quote of half an hour ago (measured 2026-11-24: 35 min, labelled "Live quotes").
+  hub.subscribe(owner, syms, false);
+  if (hub.refreshStale(syms, 15000) == 0) { answer(); return; }
+  waitUntil(&hub, &market::QuoteHub::updated, [syms] {
+    auto& h = market::QuoteHub::instance();
+    for (const auto& s : syms) { const qint64 age = h.ageMs(s); if (age < 0 || age > 20000) return false; }
+    return true;
+  }, 8000, answer);
 }
 
 // ------------------------------------------------------------------------------------------------ history
@@ -210,7 +236,7 @@ void history(const QJsonObject& a, ToolDone done) {
              " | " + num(b.o, dec) + " | " + num(b.h, dec) + " | " + num(b.l, dec) + " | " + num(b.c, dec) + "\n";
     }
     done(okText(out));
-  });
+  }, 60);   // cache 60 s (the pages keep 30 min for a day bar, 5 min for an hour): the last bar must be this minute's
 }
 
 // ------------------------------------------------------------------------------------------------ calendar
@@ -250,14 +276,21 @@ void calendar(const QJsonObject& a, ToolDone done) {
       }
     }
     if (n == 0) out += "(no event matches)\n";
-    if (!notes.isEmpty()) out += "Not available: " + notes.join("; ") + "\n";
-    done(okText(out));
+    done(okText(out, (notes.isEmpty() ? QString() : "Not available: " + notes.join("; ") + "\n") +
+                     "Actuals feed last downloaded " + ageText(c.lastActuals()) + " (asked at most every 5 min: the source's own limit).\n"));
   };
-  QList<QDate> missing;
-  for (const QDate& w : weeks) if (!cal.hasData(w)) missing << w;
-  if (missing.isEmpty()) { answer(); return; }
-  for (const QDate& w : missing) cal.load(w);
-  waitSignal(&cal, &news::Calendar::weekLoaded, 6000, answer);
+  auto proceed = [=] {
+    auto& c = news::Calendar::instance();
+    QList<QDate> missing;
+    for (const QDate& w : weeks) if (!c.hasData(w)) missing << w;
+    if (missing.isEmpty()) { answer(); return; }
+    for (const QDate& w : missing) c.load(w);
+    waitSignal(&c, &news::Calendar::weekLoaded, 6000, answer);
+  };
+  // The actuals (figures just released) come from a feed polled only while a page is shown: ask it once more now.
+  // A copy younger than 5 min is served without a request (the source's own limit, news/ActualsPace.h).
+  cal.refreshActuals();
+  waitSignal(&cal, &news::Calendar::actualsPolled, 6000, proceed);
 }
 
 // ------------------------------------------------------------------------------------------------ news
@@ -274,25 +307,38 @@ void newsFeed(const QJsonObject& a, ToolDone done) {
       if (++n >= max) break;
     }
     if (n == 0) out += "(no story matches)\n";
-    done(okText(out));
+    done(okText(out, "Newest feed download " + ageText(news::Feed::instance().lastRefresh()) + " (each source is asked at its own pace, 2 to 10 min).\n"));
   };
+  // Every source whose own pause has passed is asked again, and the answer waits for all of them. It used to answer at
+  // the first one back and to trust a 10-minute-old download: on 2026-11-24 the first call after a pause gave stories
+  // 54 minutes old, the second (three minutes later) the fresh ones.
   auto& feed = news::Feed::instance();
-  if (!feed.stories().isEmpty() && feed.lastRefresh().isValid() && feed.lastRefresh().secsTo(QDateTime::currentDateTimeUtc()) < 600) { answer(); return; }
   auto* owner = new QObject(qApp);
   feed.setActive(owner, true);
-  waitSignal(&feed, &news::Feed::updated, 12000, [answer, owner] { news::Feed::instance().setActive(owner, false); owner->deleteLater(); answer(); });
+  auto finish = [answer, owner] { news::Feed::instance().setActive(owner, false); owner->deleteLater(); answer(); };
+  if (!feed.busy()) { finish(); return; }
+  waitSignal(&feed, &news::Feed::settled, 12000, finish);
 }
 
 void squawk(const QJsonObject& a, ToolDone done) {
   const int max = intArg(a, "max", 20, 1, 50);
-  const auto items = wire::Wire::instance().items(wire::Filter::All, max);
-  QString out = "Squawk / live wire (FinancialJuice, investingLive, central banks; movers detected by Deepwater), newest first\n";
-  for (const auto& i : items) {
-    out += utc(i.time) + " | " + (i.kind == wire::Kind::Mover ? "MOVER" : i.kind == wire::Kind::Release ? "RELEASE" : "HEADLINE") +
-           " | " + i.source + " | " + i.text + "\n";
-  }
-  if (items.isEmpty()) out += "(the wire has no item yet)\n";
-  done(okText(out));
+  auto answer = [max, done] {
+    auto& w = wire::Wire::instance();
+    const auto items = w.items(wire::Filter::All, max);
+    QString out = "Squawk / live wire (FinancialJuice, investingLive, central banks; movers detected by Deepwater), newest first\n";
+    for (const auto& i : items) {
+      out += utc(i.time) + " | " + (i.kind == wire::Kind::Mover ? "MOVER" : i.kind == wire::Kind::Release ? "RELEASE" : "HEADLINE") +
+             " | " + i.source + " | " + i.text + "\n";
+    }
+    if (items.isEmpty()) out += "(the wire has no item yet)\n";
+    done(okText(out, "Feeds last polled " + ageText(w.lastFetch()) + " (each feed at the pace its publisher asks: 1 to 10 min)." +
+                     (w.feedErrors().isEmpty() ? QString() : " Feed errors: " + w.feedErrors().join("; ") + ".") + "\n"));
+  };
+  // Feeds follow their idle pace (10 to 30 min) while no page is shown: poll the ones past their active pace now
+  auto& w = wire::Wire::instance();
+  w.refreshNow();
+  if (!w.busy()) { answer(); return; }
+  waitSignal(&w, &wire::Wire::settled, 10000, answer);
 }
 
 // ------------------------------------------------------------------------------------------------ macro
@@ -338,7 +384,8 @@ void macroData(const QJsonObject& a, ToolDone done) {
 void centralBanks(const QJsonObject& a, ToolDone done) {
   const QString key = strArg(a, "bank");
   auto& cb = macro::CentralBanks::instance();
-  cb.ensureLoaded();
+  cb.refreshOdds(300);   // the Fed's and the ECB's, past 5 min: asked now, the answer waits for the Fed's (below)
+  const QDateTime asked = QDateTime::currentDateTime();
   auto answer = [=] {
     auto& c = macro::CentralBanks::instance();
     QString out = "Central banks (rates from official feeds; odds computed by Deepwater from futures where priced)\n";
@@ -348,7 +395,8 @@ void centralBanks(const QJsonObject& a, ToolDone done) {
       out += b.name + " (" + b.code + ", " + b.currency + "): rate " + (!b.rateText.isEmpty() ? b.rateText : std::isfinite(b.rate) ? num(b.rate) + "%" : QString("not loaded")) +
              (b.rateAsOf.isValid() ? " as of " + b.rateAsOf.toString(Qt::ISODate) : QString()) + " | next meeting " + (next.decision.isValid() ? next.decision.toString(Qt::ISODate) : "n/a");
       if (o.valid()) out += " | odds cut " + num(o.cut() * 100, 0) + "% hold " + num(o.hold * 100, 0) + "% hike " + num(o.hike() * 100, 0) +
-                            "% | implied " + num(b.impliedBp, 1) + " bp | bias " + b.bias();
+                            "% | implied " + num(b.impliedBp, 1) + " bp | bias " + b.bias() +
+                             (b.pricedAt.isValid() ? " | odds computed " + ageText(b.pricedAt.toUTC()) : QString());
       else out += " | no market pricing" + (b.pricingNote.isEmpty() ? QString() : " (" + b.pricingNote + ")");
       out += "\n";
       if (!full) return;
@@ -371,10 +419,12 @@ void centralBanks(const QJsonObject& a, ToolDone done) {
     if (c.banks().isEmpty()) out += "(still loading: ask again in a moment)\n";
     done(okText(out));
   };
-  waitUntil(&cb, &macro::CentralBanks::updated, [] {
+  waitUntil(&cb, &macro::CentralBanks::updated, [asked] {
     int rates = 0;
     for (const auto& b : macro::CentralBanks::instance().banks()) if (std::isfinite(b.rate)) ++rates;
-    return rates >= 6;
+    const macro::Bank* fed = macro::CentralBanks::instance().bank("FED");
+    const bool oddsIn = !fed || (fed->priced && fed->pricedAt.isValid() && fed->pricedAt.secsTo(asked) < 300);
+    return rates >= 6 && oddsIn;
   }, 15000, answer);
 }
 
@@ -436,15 +486,17 @@ void risk(const QJsonObject&, ToolDone done) {
     const auto& d = positioning::RiskIndex::instance().data();
     if (!d.ok()) { done(fail("risk sentiment not available" + (d.error.isEmpty() ? QString() : ": " + d.error))); return; }
     QString out = "Risk sentiment index (computed by Deepwater, 0 = extreme risk-off, 100 = extreme risk-on), inputs fetched " +
-                  d.updated.toUTC().toString("yyyy-MM-dd HH:mm") + " UTC\n";
+                  d.updated.toUTC().toString("yyyy-MM-dd HH:mm") + " UTC (" + ageText(d.updated.msecsTo(QDateTime::currentDateTime())) + ")\n";
     out += "composite " + num(d.value, 0) + " (" + positioning::RiskIndex::zoneLabel(d.value) + "), week ago " + num(d.weekAgo, 0) +
            ", month ago " + num(d.monthAgo, 0) + ", components available " + QString::number(d.available) + "/7\n";
     out += "component | reading | percentile\n";
     for (const auto& c : d.components) out += c.name + " | " + (c.rawText.isEmpty() ? "n/a" : c.rawText) + " | " + num(c.percentile, 0) + "\n";
     done(okText(out));
   };
-  if (!ri.data().ok() && !ri.loading()) ri.load();
-  if (!ri.data().ok()) waitSignal(&ri, &positioning::RiskIndex::updated, 15000, answer); else answer();
+  // inputs older than 5 min are fetched again (the page reloads every 30 min and only while it is shown)
+  const bool old = ri.data().ok() && ri.data().updated.isValid() && ri.data().updated.secsTo(QDateTime::currentDateTime()) > 300;
+  if (!ri.loading() && (!ri.data().ok() || old)) ri.load(300);
+  if (!ri.data().ok() || ri.loading()) waitSignal(&ri, &positioning::RiskIndex::updated, 15000, answer); else answer();
 }
 
 // ------------------------------------------------------------------------------------------------ banks
@@ -528,7 +580,7 @@ void technical(const QJsonObject& a, ToolDone done) {
     out += "ATR " + num(r.atrPct, 2) + "% of price (percentile " + num(r.atrPctile, 0) + ") | annualised volatility " + num(r.volAnn, 1) +
            "% | structure " + lean(r.structure) + "\n";
     done(okText(out));
-  });
+  }, 60);
 }
 
 void liquidity(const QJsonObject& a, ToolDone done) {
@@ -552,7 +604,7 @@ void liquidity(const QJsonObject& a, ToolDone done) {
     }
     if (open.isEmpty()) out += "(no untested pool)\n";
     done(okText(out));
-  });
+  }, 60);
 }
 
 void seasonal(const QJsonObject& a, ToolDone done) {

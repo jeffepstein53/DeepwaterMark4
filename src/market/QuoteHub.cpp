@@ -64,6 +64,21 @@ void QuoteHub::unsubscribe(QObject* owner) { m_subs.remove(owner); }
 Quote QuoteHub::quote(const QString& s) const { return m_quotes.value(appSymbol(s)); }
 void QuoteHub::refreshNow() { poll(); }
 
+qint64 QuoteHub::ageMs(const QString& s) const {
+  const qint64 t = m_fetched.value(appSymbol(s), 0);
+  return t ? QDateTime::currentMSecsSinceEpoch() - t : -1;
+}
+
+int QuoteHub::refreshStale(const QStringList& symbols, qint64 maxAgeMs, bool priority) {
+  QStringList stale;
+  for (const auto& s : symbols) {
+    const qint64 age = ageMs(s);
+    if (age < 0 || age > maxAgeMs) stale << yahooOf(s);
+  }
+  if (!stale.isEmpty()) request(stale, true, priority);   // forced (no cache); ahead of the queue when someone is waiting for it
+  return int(stale.size());
+}
+
 void QuoteHub::poll() {
   QSet<QString> want;
   for (const auto& s : m_subs) if (s.active) want.unite(s.symbols);

@@ -138,13 +138,13 @@ Les décisions de la Fed et de la BoE sont lues dans leurs communiqués officiel
 
 ### D'où viennent les données
 
-Les taux directeurs viennent de la série quotidienne de la BRI pour les huit banques, remplacée par le flux de la banque elle-même pour la Fed (Fed de New York), la BCE, la BoE, la Banque du Canada et la BNS. Aucune clé ni aucun compte n'est nécessaire. L'ouverture de la page actualise chaque partie dès qu'elle a dépassé son âge limite :
+Les taux directeurs viennent de la série quotidienne de la BRI pour les huit banques, remplacée par le flux de la banque elle-même pour la Fed (Fed de New York), la BCE, la BoE, la Banque du Canada et la BNS. Aucune clé ni aucun compte n'est nécessaire. Tant que la page est affichée, chaque partie est actualisée dès qu'elle a dépassé son âge limite :
 
 | Partie | Actualisée après |
 |---|---|
 | Taux directeurs | 30 min |
-| Probabilités Fed | 15 min |
-| Probabilités BCE et Banque du Canada | 1 h |
+| Probabilités Fed et BCE | 5 min (15 min pour la Fed et 1 h pour la BCE quand aucune page ne les affiche) |
+| Probabilités Banque du Canada | 1 h |
 | Probabilités BoE, BoJ et BNS | 2 h |
 | Probabilités RBA et RBNZ | 30 min |
 | Décisions | 6 h |

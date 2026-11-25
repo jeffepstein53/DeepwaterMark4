@@ -393,6 +393,18 @@
         <translation>Inclure mon journal de trading</translation>
     </message>
     <message>
+        <source>DATA</source>
+        <translation>DONNÉES</translation>
+    </message>
+    <message>
+        <source>Keep data fresh when its page is not shown</source>
+        <translation>Garder les données à jour quand leur page n'est pas affichée</translation>
+    </message>
+    <message>
+        <source>Quotes every minute, news and calendar at each source's own pace, even when their page is not shown. A little more battery and network.</source>
+        <translation>Cours chaque minute, actualités et calendrier au rythme propre à chaque source, même quand leur page n'est pas affichée. Un peu plus de batterie et de réseau.</translation>
+    </message>
+    <message>
         <source>ON</source>
         <translation>OUI</translation>
     </message>

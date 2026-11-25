@@ -138,13 +138,13 @@ Fed and BoE decisions are read from their official statements. For the other ban
 
 ### Where the data comes from
 
-Policy rates come from the BIS daily series for all eight banks, replaced by the bank's own feed for the Fed (NY Fed), ECB, BoE, BoC and SNB. No key or account is needed. Opening the page refreshes each part once it is older than its limit:
+Policy rates come from the BIS daily series for all eight banks, replaced by the bank's own feed for the Fed (NY Fed), ECB, BoE, BoC and SNB. No key or account is needed. While the page is shown, each part is refreshed once it is older than its limit:
 
 | Part | Refreshed after |
 |---|---|
 | Policy rates | 30 min |
-| Fed odds | 15 min |
-| ECB and BoC odds | 1 h |
+| Fed and ECB odds | 5 min (15 min for the Fed and 1 h for the ECB when no page shows them) |
+| BoC odds | 1 h |
 | BoE, BoJ and SNB odds | 2 h |
 | RBA and RBNZ odds | 30 min |
 | Decisions | 6 h |

@@ -28,7 +28,7 @@ The gauge tells you whether the market is taking on risk or shedding it. It runs
 
 Hovering the title explains the method. The score is the average percentile, against the previous 252 trading days, of seven components computed from Yahoo Finance daily closes: Volatility (VIX), Equity trend (the S&P 500 against its 125-day average), Credit appetite (HYG/LQD), AUD/JPY, Copper / Gold, Stocks vs safe haven, and Crypto momentum. The tooltip lists each component's raw value and percentile, and when the inputs were fetched.
 
-The gauge refreshes when the page opens, then every 30 minutes while it stays open. The full gauge, with its drivers, is in [Positioning › Risk Sentiment](help:positioning).
+The gauge refreshes when the page opens, then every 5 minutes while it stays open. The full gauge, with its drivers, is in [Positioning › Risk Sentiment](help:positioning).
 
 ### Currency Strength
 

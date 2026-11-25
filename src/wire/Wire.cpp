@@ -264,16 +264,27 @@ void Wire::schedule() {
   m_timer.start(int(ms));
 }
 
+void Wire::settle() {
+  if (m_inflight > 0 && --m_inflight == 0) emit settled();
+}
+
+void Wire::refreshNow() {
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  for (auto& f : m_feeds)
+    if (!f.busy && (!f.last.isValid() || f.last.secsTo(now) >= f.activeSec)) fetch(f);
+}
+
 void Wire::fetch(Feed& f) {
   f.busy = true;
   f.last = QDateTime::currentDateTimeUtc();
   net::Request r; r.url = QUrl(f.url); r.ttlSec = qMax(1, f.activeSec - 5); r.staleOnError = false;
   const QString id = f.id, name = f.name;
+  ++m_inflight;
   net::get(r, this, [this, id, name](const net::Reply& rep) {
     Feed* feed = nullptr;
     for (auto& x : m_feeds) if (x.id == id) feed = &x;
-    if (!feed) return;
-    if (!rep.ok()) { feed->busy = false; feed->error = rep.error; emit changed(); return; }
+    if (!feed) { settle(); return; }
+    if (!rep.ok()) { feed->busy = false; feed->error = rep.error; emit changed(); settle(); return; }
     auto* w = new QFutureWatcher<ParsedFeed>(this);
     connect(w, &QFutureWatcher<ParsedFeed>::finished, this, [this, w, id] {
       const ParsedFeed pf = w->result();
@@ -283,6 +294,7 @@ void Wire::fetch(Feed& f) {
       const QDateTime before = m_lastReceived;
       ingest(pf.items);
       if (m_lastReceived == before) emit changed();   // nothing new: still tell consumers (footer stamp, errors)
+      settle();
     });
     w->setFuture(QtConcurrent::run(parseFeed, rep.body, id, name));
   });

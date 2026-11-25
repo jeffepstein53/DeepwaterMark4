@@ -292,6 +292,8 @@ CotPage::CotPage(QWidget* parent) : QWidget(parent) {
     m_category = i; settings::setValue("positioning.cot.category", i); m_content->donut->setData(m_hist, i);
   });
   connect(m_content->price, &cotui::PricePanel::modeChanged, this, [this](int) { loadPrice(); });
+  m_check.setInterval(60 * 1000);
+  connect(&m_check, &QTimer::timeout, this, &CotPage::checkReport);
 
   const QByteArray hv = qgetenv("DW_COT_HOVER"), sc = qgetenv("DW_COT_SCROLL");
   if (!hv.isEmpty() || !sc.isEmpty())
@@ -349,14 +351,32 @@ void CotPage::setPhoneMode(bool on) {
 int CotPage::rangeWeeks() const { static const int w[4] = {26, 52, 104, 156}; return w[qBound(0, m_range->current(), 3)]; }
 
 void CotPage::showEvent(QShowEvent*) {
+  m_check.start();
   if (m_loaded) {
-    // coming back: ask again when the last answer failed, was partial or is older than the CFTC cache (6 h)
-    const bool old = !m_histAt.isValid() || m_histAt.secsTo(QDateTime::currentDateTimeUtc()) >= 6 * 3600;
-    if (!m_market.isEmpty() && (!m_hist.ok() || !m_hist.warning.isEmpty() || old)) selectMarket(m_market);
+    // coming back: ask again when the last answer failed, was partial or is older than its pace allows
+    if (!m_market.isEmpty() && (!m_hist.ok() || !m_hist.warning.isEmpty() || Cot::instance().due(m_market))) selectMarket(m_market);
     return;
   }
   m_loaded = true;
   setAssetClass(m_class, true);
+}
+void CotPage::hideEvent(QHideEvent*) { m_check.stop(); }
+
+void CotPage::checkReport() {
+  if (m_market.isEmpty() || !m_hist.ok() || !Cot::instance().due(m_market)) return;
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  if (m_checkedAt.isValid() && m_checkedAt.secsTo(now) < 300) return;   // an answer that does not come is not asked every minute
+  m_checkedAt = now;
+  Cot::instance().history(m_market, this, [this, id = m_market](const CotHistory& h) {
+    // what is on screen stays unless something newer came: a failure or the same report changes nothing
+    if (id != m_market || !h.ok() || h.stale || !h.warning.isEmpty()) return;
+    const bool same = m_hist.ok() && m_hist.weeks.last().date == h.weeks.last().date && m_hist.warning.isEmpty() && !m_hist.stale;
+    if (same) return;
+    m_hist = h;
+    m_content->message.clear();
+    m_content->update();
+    apply();
+  });
 }
 
 void CotPage::setAssetClass(const QString& cls, bool keep) {
@@ -383,7 +403,6 @@ void CotPage::selectMarket(const QString& id) {
   Cot::instance().history(id, this, [this, id](const CotHistory& h) {
     if (id != m_market) return;
     m_hist = h;
-    m_histAt = QDateTime::currentDateTimeUtc();
     m_content->message = !h.ok() ? QCoreApplication::translate("positioning", "CFTC: %1").arg(h.error)
                          : !h.warning.isEmpty() ? QCoreApplication::translate("positioning", "CFTC: one report could not be loaded (%1) — some panels are empty").arg(h.warning)
                          : h.stale ? QCoreApplication::translate("positioning", "CFTC unreachable — showing the cached report") : QString();

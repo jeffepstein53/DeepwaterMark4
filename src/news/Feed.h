@@ -72,12 +72,16 @@ public:
   void setActive(QObject* owner, bool active);
   static QStringList defaultSourcesOff();   // settings key news.feed.sourcesOff
   void refresh();
+  bool busy() const { return m_inflight > 0; }   // feed downloads on the wire (the tools Claude reads with wait for them all)
 signals:
   void updated();
+  void settled();    // every download started has come back (answer, error or timeout)
 private:
   Feed();
   void poll(bool force);
   void fetch(const FeedSource& s, const QString& url);
+  void settle();
+  int m_inflight = 0;
   void merge(const QList<Story>& in);
   void save();
   QList<Story> m_stories;

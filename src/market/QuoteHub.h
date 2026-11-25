@@ -38,6 +38,13 @@ public:
   Quote quote(const QString& symbol) const;
   bool has(const QString& symbol) const { return m_quotes.contains(symbol); }
   void refreshNow();
+  // Age (ms) of the symbol's last live answer; -1 when none has landed (never asked, or only a stale cached copy).
+  qint64 ageMs(const QString& symbol) const;
+  // Asks again, now and ahead of the queue, every symbol whose last live answer is older than maxAgeMs (or has none);
+  // returns how many were asked. `updated` follows as each answer lands. For the tools Claude reads with: a page
+  // keeps its own 20 s poll, a tool must not answer with a quote that nothing has refreshed for half an hour.
+  // priority: ahead of the queue (a tool is waiting for the answer); false for the background refresh (app/Background).
+  int refreshStale(const QStringList& symbols, qint64 maxAgeMs, bool priority = true);
   int intervalMs() const { return m_timer.interval(); }
 signals:
   void updated(const QStringList& symbols);

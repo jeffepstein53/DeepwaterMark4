@@ -1,4 +1,5 @@
 #include "news/Calendar.h"
+#include "news/ActualsPace.h"
 #include <QCoreApplication>
 #include "core/I18n.h"
 #include "news/DataHeadline.h"
@@ -153,8 +154,10 @@ static QString weekFile(const QDate& w) { return paths::data("news/calendar") + 
 Calendar& Calendar::instance() { static Calendar* c = new Calendar; return *c; }
 
 Calendar::Calendar() {
-  m_poll.setInterval(5 * 60 * 1000);
-  connect(&m_poll, &QTimer::timeout, this, [this] { fetchMyfxbook(); });
+  m_poll.setSingleShot(true);
+  m_poll.setTimerType(Qt::PreciseTimer);   // a coarse timer may be 5 % off: 15 s on 5 min, and it may fire early
+  connect(&m_poll, &QTimer::timeout, this, [this] { fetchMyfxbook(); planPoll(); });
+  connect(this, &Calendar::weekLoaded, this, [this](const QDate& w) { if (w == currentWeek()) planPoll(); });   // release times known or moved
   // ForexFactory itself every 30 minutes while active (forecast revisions, time changes)
   auto* ff = new QTimer(this); ff->setInterval(30 * 60 * 1000);
   connect(ff, &QTimer::timeout, this, [this] { if (!m_active.isEmpty()) fetchForexFactory("thisweek"); });
@@ -173,8 +176,29 @@ void Calendar::setActive(QObject* owner, bool active) {
     m_active.insert(owner);
   } else m_active.remove(owner);
   const bool now = !m_active.isEmpty();
-  if (now && !was) { fetchMyfxbook(); m_poll.start(); }
+  if (now && !was) { fetchMyfxbook(); planPoll(); }
   if (!now && was) m_poll.stop();
+}
+
+QList<QDateTime> Calendar::awaitedReleases() const {
+  QList<QDateTime> out;
+  const QDateTime from = QDateTime::currentDateTimeUtc().addSecs(-2 * actualspace::kEverySec - actualspace::kLagSec);
+  for (const Event& e : m_weeks.value(currentWeek())) {
+    if (e.allDay || e.impact < Impact::Medium || e.actual.has() || e.isSpeech()) continue;
+    if (!e.forecast.has() && !e.previous.has()) continue;   // minutes, votes, press conferences: no figure will come
+    if (e.time >= from) out << e.time;
+  }
+  return out;
+}
+
+void Calendar::planPoll() {
+  if (m_active.isEmpty()) return;
+  const QDateTime now = QDateTime::currentDateTimeUtc();
+  QDateTime last = m_lastActuals;
+  if (m_lastActualsTry.isValid() && (!last.isValid() || m_lastActualsTry > last)) last = m_lastActualsTry;
+  if (!last.isValid()) last = now;   // the first request has just left: planned again when it comes back
+  const qint64 ms = now.msecsTo(actualspace::nextPoll(last, now, awaitedReleases()));
+  m_poll.start(int(std::clamp<qint64>(ms, 1000, 2 * actualspace::kEverySec * 1000LL)));
 }
 
 QList<Event> Calendar::events(const QDate& w) const { return m_weeks.value(w); }
@@ -372,9 +396,13 @@ static QSet<QString> nameTokens(QString s) {
 void Calendar::fetchMyfxbook() {
   net::Request r;
   r.url = QUrl("https://www.myfxbook.com/rss/forex-economic-calendar-events");
-  r.ttlSec = 4 * 60;
-  net::get(r, this, [this](const net::Reply& rep) {
-    if (rep.body.isEmpty()) return;
+  const QDateTime asked = QDateTime::currentDateTimeUtc();
+  r.ttlSec = actualspace::ttlSec(m_lastActuals, asked, awaitedReleases());
+  net::get(r, this, [this, asked](const net::Reply& rep) {
+    if (!rep.fromCache || rep.stale) m_lastActualsTry = asked;
+    if (rep.fetched.isValid() && !rep.body.isEmpty()) m_lastActuals = rep.fetched;
+    planPoll();
+    if (rep.body.isEmpty()) { emit actualsPolled(); return; }
     const QString xml = QString::fromUtf8(rep.body);
     static const QRegularExpression item(R"(<item>(.*?)</item>)", QRegularExpression::DotMatchesEverythingOption);
     static const QRegularExpression title(R"(<title>(.*?)</title>)", QRegularExpression::DotMatchesEverythingOption);
@@ -418,6 +446,7 @@ void Calendar::fetchMyfxbook() {
       best[k] = {name, m}; values[k] = actual;
     }
     for (auto it = best.cbegin(); it != best.cend(); ++it) applyActual(it->first, it->second, values.value(it.key()));
+    emit actualsPolled();
   });
 }
 
@@ -697,7 +726,7 @@ void Calendar::startBackground() {
   static QObject* owner = nullptr;
   if (owner) return;
   owner = new QObject(this);
-  setActive(owner, true);                 // Myfxbook every 5 min for the whole session
+  setActive(owner, true);                 // Myfxbook for the whole session, at most every 5 min
   buildReleaseIndex();                    // ready by the time a row is expanded
   const QDate cur = currentWeek();
   load(cur);

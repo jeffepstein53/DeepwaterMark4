@@ -271,13 +271,13 @@ const QList<FeedSource>& Feed::sources() const {
      {"https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC,%5EDJI,%5EIXIC,EURUSD=X,GC=F,CL=F&region=US&lang=en-US"}, 300},
     {"cnbc", "CNBC", "cnbc.com",
      {"https://www.cnbc.com/id/100003114/device/rss/rss.html", "https://www.cnbc.com/id/20910258/device/rss/rss.html",
-      "https://www.cnbc.com/id/10000664/device/rss/rss.html", "https://www.cnbc.com/id/15839135/device/rss/rss.html"}, 300},
+      "https://www.cnbc.com/id/10000664/device/rss/rss.html", "https://www.cnbc.com/id/15839135/device/rss/rss.html"}, 120},
     {"marketwatch", "MARKETWATCH", "marketwatch.com",
      {"https://feeds.content.dowjones.io/public/rss/mw_topstories", "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
-      "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines"}, 300},
+      "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines"}, 120},
     {"centralbanks", QT_TRANSLATE_NOOP("news", "CENTRAL BANKS"), "federalreserve.gov · ecb.europa.eu · bankofengland.co.uk",
      {"https://www.federalreserve.gov/feeds/press_all.xml", "https://www.ecb.europa.eu/rss/press.html",
-      "https://www.bankofengland.co.uk/rss/news"}, 900},
+      "https://www.bankofengland.co.uk/rss/news"}, 300},
     {"financialjuice", "FINANCIALJUICE", "financialjuice.com", {"https://www.financialjuice.com/feed.ashx?xy=rss"}, 120},
     {"nasdaq", "NASDAQ", "nasdaq.com", {"https://www.nasdaq.com/feed/rssoutbound?category=Markets"}, 600},
   };
@@ -350,15 +350,20 @@ void Feed::poll(bool force) {
     }
 }
 
+void Feed::settle() {
+  if (m_inflight > 0 && --m_inflight == 0) emit settled();
+}
+
 void Feed::fetch(const FeedSource& s, const QString& url) {
   net::Request r; r.url = QUrl(url); r.ttlSec = s.pollSec - 5;
   r.priority = true;   // ahead of story images queued for the same host (investinglive.com: one request a minute)
+  ++m_inflight;
   net::get(r, this, [this, s, url](const net::Reply& rep) {
     const QPair<QString, QString> key(s.id, url);
     // an HTTP error page (403 / 429 HTML) is an error, not an empty feed; per URL: a source may have several feeds
     if (!rep.ok() || rep.body.isEmpty()) {
       m_errors[key] = !rep.error.isEmpty() ? rep.error : rep.ok() ? QStringLiteral("empty answer") : QString("HTTP %1").arg(rep.status);
-      emit updated(); return;
+      emit updated(); settle(); return;
     }
     // a cached copy served after a failure: the feed still failed, so the header must say so (it showed the old
     // stories as if the source were fine)
@@ -370,6 +375,7 @@ void Feed::fetch(const FeedSource& s, const QString& url) {
       const auto list = w->result();
       if (!cache || !m_lastRefresh.isValid()) m_lastRefresh = std::max(m_lastRefresh, fetched);
       merge(list);
+      settle();
     });
     w->setFuture(QtConcurrent::run([body = rep.body, s] { return parseFeed(body, s); }));
   });

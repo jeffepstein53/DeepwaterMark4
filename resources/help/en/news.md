@@ -47,7 +47,7 @@ Further down, the **CONSENSUS**, **RANGE**, **PREVIOUS** and **ACTUAL** boxes re
 
 Events, impact, forecasts and previous figures come from the ForexFactory weekly calendar. Deepwater reloads it every 30 minutes while the page is shown. Actuals are recorded as they come out, from three sources:
 
-- the Myfxbook calendar RSS, checked every 5 minutes while the page is shown;
+- the Myfxbook calendar RSS, checked at most every 5 minutes while Deepwater runs; the check is placed about a minute after each medium or high-impact release;
 - data headlines on the wire (FinancialJuice, investingLive), accepted only when the currency, the release time, the indicator's words, the unit and the stated forecast or prior all match;
 - official series (OECD, BLS, Bank of Canada) for past releases.
 
@@ -92,14 +92,14 @@ Beside the text, the **AUTOMATED READ** panel sums up the story using fixed rule
 |---|---|---|
 | investingLive | 2 min | on |
 | Yahoo Finance | 5 min | on |
-| CNBC | 5 min | on |
-| MarketWatch | 5 min | on |
-| Central banks (Fed, ECB, Bank of England) | 15 min | on |
+| CNBC | 2 min | on |
+| MarketWatch | 2 min | on |
+| Central banks (Fed, ECB, Bank of England) | 5 min | on |
 | FinancialJuice | 2 min | off |
 | Nasdaq | 10 min | off |
 | Investing.com | 5 min | off |
 
-Feeds are polled only while the page is shown. Stories are kept for 4 days, up to 900 of them, and images are cached for 7 days. Many feeds carry no image, and a generated tile takes its place.
+Feeds are polled while the page is shown, and in the background when **Options › Data** keeps data fresh (on by default). Stories are kept for 4 days, up to 900 of them, and images are cached for 7 days. Many feeds carry no image, and a generated tile takes its place.
 
 ## Bank Research
 

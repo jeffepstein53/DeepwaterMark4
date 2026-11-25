@@ -24,6 +24,6 @@ private:
   pk::Ticker* m_ticker;
   pk::Scroll* m_scroll;
   class RiskContent* m_content;
-  QTimer m_reload;                 // the index's inputs are cached 30 min: asked again that often while shown
+  QTimer m_reload;                 // the index's inputs, asked again every 5 min while shown
 };
 }  // namespace positioning

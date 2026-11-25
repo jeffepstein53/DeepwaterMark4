@@ -265,6 +265,8 @@ CentralBanks::CentralBanks() {
   loadSchedule();
   m_polyStatus = QCoreApplication::translate("economy", "Not checked yet");
   connect(&i18n::Notifier::instance(), &i18n::Notifier::changed, this, &CentralBanks::retranslate);
+  m_activeTimer.setInterval(60 * 1000);
+  connect(&m_activeTimer, &QTimer::timeout, this, [this] { ensureLoaded(); });   // each part at its own pace inside
 }
 
 void CentralBanks::retranslate() {
@@ -329,10 +331,11 @@ void CentralBanks::ensureLoaded() {
     m_started[k] = now; return true;
   };
   const qint64 M = 60 * 1000;
+  const bool shown = !m_active.isEmpty();
   if (due("rates", 30 * M)) loadRates();
   if (due("fedschedule", 24 * 60 * M)) loadFedSchedule();
-  if (due("fedpricing", 15 * M)) loadFedPricing();
-  if (due("ecbpricing", 60 * M)) loadEcbPricing();
+  if (due("fedpricing", (shown ? 5 : 15) * M)) loadFedPricing();
+  if (due("ecbpricing", (shown ? 5 : 60) * M)) loadEcbPricing();
   if (due("bocpricing", 60 * M)) loadBocPricing();
   if (due("boepricing", 120 * M)) loadBoePricing();
   if (due("bojpricing", 120 * M)) loadBojPricing();
@@ -340,6 +343,27 @@ void CentralBanks::ensureLoaded() {
   if (due("fjpricing", 30 * M)) loadFjPricing();
   if (due("decisions", 6 * 60 * M)) loadDecisions();
   if (due("poly", 6 * 60 * M)) probePolymarket();
+}
+
+void CentralBanks::setActive(QObject* owner, bool active) {
+  if (active) {
+    if (!m_active.contains(owner)) connect(owner, &QObject::destroyed, this, [this, owner] { setActive(owner, false); });
+    m_active.insert(owner);
+    ensureLoaded();
+    if (!m_activeTimer.isActive()) m_activeTimer.start();
+  } else {
+    if (m_active.remove(owner)) disconnect(owner, &QObject::destroyed, this, nullptr);   // connected again at the next visit
+    if (m_active.isEmpty()) m_activeTimer.stop();
+  }
+}
+
+void CentralBanks::refreshOdds(int maxAgeSec) {
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  for (const char* k : {"fedpricing", "ecbpricing"}) {
+    const auto it = m_started.constFind(k);
+    if (it != m_started.cend() && now - *it >= maxAgeSec * 1000LL) m_started.remove(k);
+  }
+  ensureLoaded();
 }
 
 // ------------------------------------------------------------------------------------------------ rates
@@ -649,8 +673,10 @@ void CentralBanks::loadFedPricing() {
     changed();
   };
   for (const auto& [sym, c] : contracts) {
-    market::candles(sym, "1d", "3mo", this, [g, sym, finish](const market::Series& s) { g->daily[sym] = s; finish(); });
-    market::candles(sym, "1h", "1mo", this, [g, sym, finish](const market::Series& s) { g->hourly[sym] = s; finish(); });
+    // the daily series carries today's price (the odds shown): under 4 min old, where the 30 min of a daily series' usual
+    // cache made the "every 15 min" odds move every 30; the hourly one only draws the history
+    market::candles(sym, "1d", "3mo", this, [g, sym, finish](const market::Series& s) { g->daily[sym] = s; finish(); }, 240);
+    market::candles(sym, "1h", "1mo", this, [g, sym, finish](const market::Series& s) { g->hourly[sym] = s; finish(); }, 1800);
   }
 }
 
@@ -681,7 +707,7 @@ void CentralBanks::loadEcbPricing() {
     changed();
   };
   for (const auto& [sym, c] : contracts)
-    market::candles(sym, "1d", "6mo", this, [g, sym, finish](const market::Series& s) { g->daily[sym] = s; finish(); });
+    market::candles(sym, "1d", "6mo", this, [g, sym, finish](const market::Series& s) { g->daily[sym] = s; finish(); }, 240);
 }
 
 void CentralBanks::loadBocPricing() {

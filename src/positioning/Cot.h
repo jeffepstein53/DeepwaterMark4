@@ -14,7 +14,8 @@
 //   Traders in Financial Fut dataset gpe5-46if  (Dealer / Asset Manager / Leveraged Funds / Other) — currencies, indices
 //   Disaggregated            dataset 72hh-3qpy  (Producer / Swap Dealers / Managed Money / Other)  — commodities
 // One request per dataset and market, about five years of weekly rows, cached on disk 6 hours (the report is weekly:
-// Tuesday positions, published Friday 15:30 ET).
+// Tuesday positions, published Friday 15:30 ET), except while a published report is missing from the copy in hand: then
+// it is asked again at once, then every 10 minutes (positioning/CotPace.h).
 //
 //   positioning::Cot::instance().history("EUR", this, [](const positioning::CotHistory& h) { ... });
 //   const auto& w = h.weeks.last();               // latest report
@@ -100,11 +101,15 @@ public:
   // kept apart from the pages' 5-year history
   void deepHistory(const QString& id, QObject* ctx, Callback cb);
   const CotHistory* cachedHistory(const QString& id) const;
+  // True when asking history(id) now would go to the CFTC: nothing in memory, or older than its pace allows.
+  bool due(const QString& id) const;
 
 private:
   Cot() = default;
   struct Pending { QPointer<QObject> ctx; bool hasCtx; Callback cb; };
-  struct Load { int left = 0; QByteArray legacy, second; QString error; bool stale = false; QDateTime fetched; QList<Pending> waiters; };
+  struct Load { int left = 0; QByteArray legacy, second; QString error; bool stale = false; QDateTime fetched; QList<Pending> waiters;
+                bool again = false; };   // again: this is the second asking (the cached copy missed a published report)
+  void issue(const QString& key, int ttlSec);
   void finish(const QString& id);
   void load(const QString& key, QObject* ctx, Callback cb);   // key: market id, + "#deep" for the whole history
   QHash<QString, CotHistory> m_done;

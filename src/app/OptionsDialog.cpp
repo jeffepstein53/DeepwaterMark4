@@ -1,6 +1,7 @@
 #include "app/OptionsDialog.h"
 #include "core/I18n.h"
 #include "app/Zoom.h"
+#include "app/Background.h"
 #include "core/Settings.h"
 #include "ui/Kit.h"
 #include "ui/Theme.h"
@@ -38,14 +39,14 @@ protected:
   void mouseReleaseEvent(QMouseEvent*) override { m_dragging = false; }
   void leaveEvent(QEvent*) override { if (m_hover != None) { m_hover = None; update(); } }
 private:
-  enum Hit { None, Close, LangEn, LangFr, Restart, McpToggle = 40, McpJournal, McpCode, McpDesktop, ZoomFirst = 50, ThemeFirst = 100 };
+  enum Hit { None, Close, LangEn, LangFr, Restart, McpToggle = 40, McpJournal, McpCode, McpDesktop, DataToggle = 44, ZoomFirst = 50, ThemeFirst = 100 };
   struct Area { QRectF r; int id; };
   struct Layout {
     bool narrow = false;
     qreal pad = 26;
     QRectF close, langHint, themeHint, footer;
-    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0, claudeLabelY = 0;
-    QRectF zoomHint, claudeHint, claudeNote;
+    qreal langLabelY = 0, themeLabelY = 0, zoomLabelY = 0, claudeLabelY = 0, dataLabelY = 0;
+    QRectF zoomHint, claudeHint, claudeNote, dataHint;
     QList<Area> areas;
     int height = 0;
   };
@@ -66,6 +67,9 @@ private:
   }
   static QString claudeHintText() {
     return otr("Claude Code and Claude Desktop can read what Deepwater's pages show (read only, never an order), while Deepwater is open. What Claude reads is sent to Anthropic.");
+  }
+  static QString dataHintText() {
+    return otr("Quotes every minute, news and calendar at each source's own pace, even when their page is not shown. A little more battery and network.");
   }
   static QString zoomHintText() {
     return zoom::saved() == zoom::active()
@@ -115,6 +119,14 @@ Body::Layout Body::layout(int w) const {
   for (int i = 0; i < themes.size(); ++i)
     L.areas << Area{QRectF(pad + (i % 2) * (half + 10), y + (i / 2) * (ch + 8), half, ch), ThemeFirst + i};
   y += ((themes.size() + 1) / 2) * (ch + 8) - 8;
+  // data: one switch (keep the data fresh while its page is not shown)
+  y += 38;
+  L.dataLabelY = y;
+  const qreal dh = std::max<qreal>(22, hintH(dataHintText()));
+  L.dataHint = QRectF(pad, y + 6, inner, dh);
+  y = L.dataHint.bottom() + 6;
+  L.areas << Area{QRectF(pad, y, inner, 46), DataToggle};
+  y += 46;
 #ifdef DW_CLAUDE
   // Claude: two switches, then one button for each client
   y += 38;
@@ -250,10 +262,7 @@ void Body::paintEvent(QPaintEvent*) {
     }
   }
 
-#ifdef DW_CLAUDE
-  // Claude
-  section(L.claudeLabelY, otr("CLAUDE"), L.claudeHint, claudeHintText());
-  auto& mcp = ai::McpServer::instance();
+  // a switch: ON / OFF at the right (the Data and Claude sections use it)
   auto toggle = [&](const Area& a, const QString& text, bool on) {
     const bool hov = a.id == m_hover;
     p.setPen(QPen(on ? c.accent : hov ? c.borderHi : c.border, 1));
@@ -266,6 +275,16 @@ void Body::paintEvent(QPaintEvent*) {
     p.setFont(theme::mono(10, QFont::Medium, 1.5)); p.setPen(on ? theme::alpha(c.accent, 200) : c.textMute);
     p.drawText(a.r.adjusted(0, 0, -in, 0), Qt::AlignVCenter | Qt::AlignRight, on ? otr("ON") : otr("OFF"));
   };
+
+  // data
+  section(L.dataLabelY, otr("DATA"), L.dataHint, dataHintText());
+  for (const auto& a : L.areas)
+    if (a.id == DataToggle) toggle(a, otr("Keep data fresh when its page is not shown"), app::Background::enabled());
+
+#ifdef DW_CLAUDE
+  // Claude
+  section(L.claudeLabelY, otr("CLAUDE"), L.claudeHint, claudeHintText());
+  auto& mcp = ai::McpServer::instance();
   for (const auto& a : L.areas) {
     if (a.id == McpToggle) toggle(a, otr("Let Claude read Deepwater's data"), mcp.externalEnabled());
     else if (a.id == McpJournal) toggle(a, otr("Include my trading journal"), mcp.journalIncluded());
@@ -307,6 +326,7 @@ void Body::mousePressEvent(QMouseEvent* e) {
   if (h == LangEn) i18n::setLanguage(i18n::Lang::English);
   else if (h == LangFr) i18n::setLanguage(i18n::Lang::French);
   else if (h == Restart) zoom::restart();
+  else if (h == DataToggle) app::Background::setEnabled(!app::Background::enabled());
 #ifdef DW_CLAUDE
   else if (h == McpToggle) ai::McpServer::instance().setExternalEnabled(!ai::McpServer::instance().externalEnabled());
   else if (h == McpJournal) ai::McpServer::instance().setJournalIncluded(!ai::McpServer::instance().journalIncluded());

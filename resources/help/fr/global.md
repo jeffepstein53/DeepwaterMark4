@@ -28,7 +28,7 @@ La jauge indique si le marché recherche le risque ou le fuit. Elle va de 0 à 1
 
 Le survol du titre explique la méthode. Le score est la moyenne des percentiles de sept composantes, chacune mesurée par rapport aux 252 séances précédentes. Les composantes sont calculées sur les clôtures quotidiennes de Yahoo Finance : Volatilité (VIX), Tendance actions (le S&P 500 face à sa moyenne 125 jours), Appétit crédit (HYG/LQD), AUD/JPY, Cuivre / Or, Actions vs valeur refuge et Momentum crypto. L'infobulle donne la valeur brute et le percentile de chaque composante, ainsi que l'heure de récupération des données.
 
-La jauge s'actualise à l'ouverture de la page, puis toutes les 30 minutes tant que la page reste ouverte. La jauge complète et ses moteurs se trouvent dans [Positionnement › Sentiment de risque](help:positioning).
+La jauge s'actualise à l'ouverture de la page, puis toutes les 5 minutes tant que la page reste ouverte. La jauge complète et ses moteurs se trouvent dans [Positionnement › Sentiment de risque](help:positioning).
 
 ### Force des devises
 

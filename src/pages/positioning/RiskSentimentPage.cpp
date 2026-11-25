@@ -621,8 +621,8 @@ RiskSentimentPage::RiskSentimentPage(QWidget* parent) : QWidget(parent) {
   connect(&RiskIndex::instance(), &RiskIndex::updated, this, [this] { refresh(); });
   if (RiskIndex::instance().data().ok()) refresh();
   // a page left open would otherwise show the closes of the moment it was opened
-  m_reload.setInterval(30 * 60 * 1000);
-  connect(&m_reload, &QTimer::timeout, this, [] { RiskIndex::instance().load(); });
+  m_reload.setInterval(5 * 60 * 1000);
+  connect(&m_reload, &QTimer::timeout, this, [] { RiskIndex::instance().load(240); });   // shorter than the timer (see OverviewData)
   // test hooks
   const QByteArray hv = qgetenv("DW_RISK_HOVER"), sc = qgetenv("DW_RISK_SCROLL");
   if (!hv.isEmpty() || !sc.isEmpty()) {
@@ -657,7 +657,7 @@ void RiskSentimentPage::applyBadge() {
   if (b != m_badge) { m_badge = b; m_title->setBadge(b, true); }
 }
 void RiskSentimentPage::resizeEvent(QResizeEvent* e) { QWidget::resizeEvent(e); applyBadge(); }
-void RiskSentimentPage::showEvent(QShowEvent*) { m_ticker->setRunning(true); RiskIndex::instance().load(); m_reload.start(); }
+void RiskSentimentPage::showEvent(QShowEvent*) { m_ticker->setRunning(true); RiskIndex::instance().load(240); m_reload.start(); }
 void RiskSentimentPage::hideEvent(QHideEvent*) { m_ticker->setRunning(false); m_reload.stop(); }
 }  // namespace positioning
 

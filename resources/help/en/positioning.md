@@ -116,9 +116,9 @@ The right-hand column places each category's net position on a marker within its
 
 ### Where the data comes from
 
-The data comes from the CFTC's public reporting API, futures only: about five years of weekly reports per market, kept for 6 hours. Positions are as of Tuesday and published on Friday at 15:30 New York time. The footer shows the release time; hover **OFFICIAL** for the report and release dates. Prices are Yahoo Finance daily candles, and no key is needed.
+The data comes from the CFTC's public reporting API, futures only: about five years of weekly reports per market, kept for 6 hours. Once a report is due (Friday 15:30 New York time) and missing, it is asked again at once, then every 10 minutes for three hours and every hour after that. Positions are as of Tuesday and published on Friday at 15:30 New York time. The footer shows the release time; hover **OFFICIAL** for the report and release dates. Prices are Yahoo Finance daily candles, and no key is needed.
 
-Coming back to the page reloads the market when its data is over 6 hours old or the last load failed. Messages above the panels report a CFTC error, one of the two reports missing (some panels then stay empty), or **CFTC unreachable — showing the cached report**.
+A new report shows by itself while the page is open. Coming back to the page reloads the market when its data is too old or the last load failed. Messages above the panels report a CFTC error, one of the two reports missing (some panels then stay empty), or **CFTC unreachable — showing the cached report**.
 
 ## Bank Positioning
 
@@ -215,4 +215,4 @@ Each row shows the raw reading, the percentile and a bar, and hovering a row hig
 
 ### Where the data comes from
 
-All readings are Yahoo Finance daily closes: VIX, S&P 500, HYG, LQD, AUD/JPY, copper and gold futures, and bitcoin. They are cached 30 minutes and asked again every 30 minutes while the page is shown, and the footer gives the update time. If Yahoo Finance cannot be reached, the panels read **Yahoo Finance daily closes unavailable**. No key is needed.
+All readings are Yahoo Finance daily closes: VIX, S&P 500, HYG, LQD, AUD/JPY, copper and gold futures, and bitcoin. They are asked again every 5 minutes while the page is shown, and the footer gives the update time. If Yahoo Finance cannot be reached, the panels read **Yahoo Finance daily closes unavailable**. No key is needed.

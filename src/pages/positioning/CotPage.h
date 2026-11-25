@@ -1,6 +1,7 @@
 #pragma once
 #include <QWidget>
 #include <QHash>
+#include <QTimer>
 #include "positioning/Cot.h"
 #include "market/Candles.h"
 
@@ -18,6 +19,7 @@ public:
   explicit CotPage(QWidget* parent = nullptr);
 protected:
   void showEvent(QShowEvent*) override;
+  void hideEvent(QHideEvent*) override;
   void resizeEvent(QResizeEvent*) override;
 private:
   // Phones (upright, or sideways: page under 420 px tall): the title row and the market buttons move into the
@@ -26,6 +28,7 @@ private:
   bool m_phone = false;
   void setAssetClass(const QString& cls, bool keepMarket = false);
   void selectMarket(const QString& id);
+  void checkReport();               // every minute while shown: a report published since is asked (positioning/CotPace.h)
   void loadPrice();
   void apply();
   int rangeWeeks() const;
@@ -40,6 +43,7 @@ private:
   int m_category = 2, m_priceReq = 0;
   positioning::CotHistory m_hist;
   bool m_loaded = false;
-  QDateTime m_histAt;               // when m_hist arrived (the page reloads on show once it is 6 h old)
+  QTimer m_check;
+  QDateTime m_checkedAt;            // last time checkReport asked
 };
 }  // namespace positioning

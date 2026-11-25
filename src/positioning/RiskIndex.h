@@ -23,7 +23,7 @@
 //
 //   auto& r = positioning::RiskIndex::instance();
 //   connect(&r, &positioning::RiskIndex::updated, this, [&] { const auto& d = r.data(); ... });
-//   r.load();          // fetches (cached 30 min) and recomputes; cheap to call again
+//   r.load(240);       // fetches what is older than 240 s and recomputes; cheap to call again
 namespace positioning {
 
 struct RiskComponent {
@@ -56,7 +56,7 @@ public:
   static RiskIndex& instance();
   const RiskData& data() const { return m_data; }
   bool loading() const { return m_left > 0; }
-  void load();
+  void load(int ttlSec = 1800);        // ttlSec: a cached answer younger than this is used (the tools Claude reads with pass 300)
 
   // Zone of a 0–100 value: 0 EXTREME OFF (<20), 1 RISK-OFF (<40), 2 NEUTRAL (40–59), 3 RISK-ON (60–79), 4 EXTREME ON.
   static int zone(double v);
