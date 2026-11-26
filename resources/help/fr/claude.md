@@ -24,7 +24,7 @@ Le dépôt du projet contient aussi un plug-in Claude prêt à l'emploi, dans le
 
 ### Les outils
 
-Claude dispose de 24 outils de lecture : cours, historique des prix, calendrier économique, actualités, fil direct (Squawk), données macro, chaînes et faits macro, banques centrales, COT, sentiment des particuliers, indice de risque, prévisions et notes des banques, heures de marché, lectures techniques, poches de liquidité, saisonnalité, scores fondamentaux, et les données enregistrées de l'onglet Data : couverture technique, données techniques, empreinte (footprint), carnet d'ordres et intérêt ouvert. Avec l'interrupteur du journal, il y en a un 25ᵉ, pour le journal de trading.
+Claude dispose de 25 outils de lecture : contrôle des données (chaque chiffre clé comparé à une deuxième source, sources qui ne répondent plus), cours, historique des prix, calendrier économique, actualités, fil direct (Squawk), données macro, chaînes et faits macro, banques centrales, COT, sentiment des particuliers, indice de risque, prévisions et notes des banques, heures de marché, lectures techniques, poches de liquidité, saisonnalité, scores fondamentaux, et les données enregistrées de l'onglet Data : couverture technique, données techniques, empreinte (footprint), carnet d'ordres et intérêt ouvert. Avec l'interrupteur du journal, il y en a un 26ᵉ, pour le journal de trading.
 
 ### À quel point les réponses sont fraîches
 

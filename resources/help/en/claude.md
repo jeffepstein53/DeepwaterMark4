@@ -24,7 +24,7 @@ The project's repository also holds a ready-made Claude plug-in, in the folder `
 
 ### The tools
 
-Claude has 24 reading tools: quotes, price history, the economic calendar, news, the live wire (Squawk), macro data, macro chains and facts, central banks, COT, retail sentiment, the risk index, bank forecasts and research, market hours, technical reads, liquidity pools, seasonality, fundamental scores, and the recorded data of the Data tab: technical coverage, technical data, footprint, order book and open interest. With the journal switch on there is a 25th, for the trading journal.
+Claude has 25 reading tools: the data check (each key figure against a second source, the sources that have stopped answering), quotes, price history, the economic calendar, news, the live wire (Squawk), macro data, macro chains and facts, central banks, COT, retail sentiment, the risk index, bank forecasts and research, market hours, technical reads, liquidity pools, seasonality, fundamental scores, and the recorded data of the Data tab: technical coverage, technical data, footprint, order book and open interest. With the journal switch on there is a 26th, for the trading journal.
 
 ### How fresh the answers are
 
